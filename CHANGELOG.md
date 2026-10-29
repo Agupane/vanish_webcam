@@ -39,7 +39,10 @@ All notable changes to this fork are documented here. The format is based on
 - `install-ubuntu.sh` recovers from a broken `v4l2loopback-dkms` package (Ubuntu 22.04 with 6.8+ kernels) by
   building upstream v4l2loopback 0.13.2 with DKMS, and handles Secure Boot module signing / MOK enrollment
   (`89a44cf`, `11c4d3f`).
-- CI failures on Windows, macOS arm64 and Ubuntu (`66136fc`).
+- CI failures on Windows and Ubuntu (`66136fc`).
+- macOS arm64: MediaPipe 1.0.1 aborted in its Metal helper during `--self-test`. `requirements.txt` now pins MediaPipe
+  1.2.0 on every platform except Intel Macs, which keep 0.10.14 (no 1.x x86_64 wheels); the whole CI matrix is green.
+  Upstream PR Nicovic17/vanish_webcam#2 reports and fixes the same crash with 1.1.1.
 
 ### Security
 
