@@ -254,10 +254,21 @@ class SilhouetteTests(unittest.TestCase):
 
     def test_body_below_the_eyes_is_never_cut(self):
         # A close webcam sees the shoulders above the chin, and a black hoodie in front of a black chair has no
-        # edge: below the eye line the segmenter mask is kept as it is, so the aura never paints on the body.
+        # edge: the body is kept as the segmenter sees it, so the aura never paints on it.
         _, segmenter, head = chair_scene()
         refined = ssj.refine_person_mask(segmenter, head)
-        self.assertLess(np.abs(refined[130:] - segmenter[130:]).max(), 0.05)
+        self.assertGreater(refined[190:, 130:351].min(), 0.9)  # Torso and shoulders.
+        self.assertGreater(refined[160:190, 225:256].min(), 0.9)  # Neck.
+        close = segmenter.copy()
+        cv2.ellipse(close, (240, 270), (110, 130), 0, 180, 360, 1.0, -1)  # Shoulders up to row 140.
+        refined = ssj.refine_person_mask(close, head)
+        self.assertGreater(refined[150:, 160:321].min(), 0.9)
+
+    def test_chair_just_below_the_eyes_is_cut_along_a_slope_not_a_shelf(self):
+        _, segmenter, head = chair_scene()
+        refined = ssj.refine_person_mask(segmenter, head)
+        self.assertLess(refined[122, 335], 0.05)  # Chair beside the face, just under the eye line.
+        self.assertGreater(refined[200, 325], 0.9)  # Further down the same column is body width.
 
     def test_unchanged_without_a_face(self):
         _, segmenter, _ = chair_scene()

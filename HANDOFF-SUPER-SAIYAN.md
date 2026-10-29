@@ -262,6 +262,12 @@ charge. Tune in `super_saiyan_effect.py` (`AURA_TONES`, `AURA_RADIUS`, `FLAME_RI
   it the segmenter as is (`body_region`); the background photo is no longer used by the aura (parameter removed from
   `refine_person_mask`, `AuraRenderer` and `render_super_saiyan`). The chair below the eyes stays in the silhouette:
   acceptable, the aura wraps it like broad shoulders. 139 tests. Next: third round, including the dark room.
+- 2026-10-29: version shown in the home window, side panel and terminal (`app_version`: git commit + date).
+  Third round (`meet5.png` light wall, `meet6.png` dark room, version `3c79082`): no more patches on the body, hair,
+  eyes and brows fine in both rooms. Left: a flat shelf at the eye line where the chair is cut, which the aura turned
+  into a boxy outline in the dark room. Fixed with `BODY_SLOPE`: below the eye line the allowed width grows from the
+  head's at 3 px per px down, so the chair is cut along a shoulder-like slope. 142 tests. Next: owner approval of
+  E1.8/E4.4/E6.5 on Windows, then Ubuntu.
 
 ## 0. Start here
 

@@ -129,7 +129,8 @@ The aura is fully procedural (there is no GIF anymore). Second version (2026-10-
 Per mask update (`AuraRenderer.geometry`, cached by mask identity, so 10 Hz under a 30 FPS output):
 
 - `refine_person_mask`: at quarter resolution, `body_region` = the `head_ellipse` from the face landmarks plus
-  everything below the eye line (`EYE_LINE`, rotated with the head); blurred, upscaled and multiplied into the
+  the region below the eye line (`EYE_LINE`, rotated with the head) that widens from the head's width at
+  `BODY_SLOPE` px per px down (a chair is cut along a slope, not a flat shelf); blurred, upscaled and multiplied into the
   segmenter mask. No background photo: the color-difference cut failed on the owner's setup (dark room, swivel chair,
   black hoodie on a black chair, close webcam with the shoulders above the chin) and painted the aura on the body.
 - the golden hair (`HairOverlay.mask`) joins the silhouette when the hair level is ≥ 0.5, so the flames rise from

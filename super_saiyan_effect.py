@@ -32,6 +32,9 @@ DARKEN = 0.28  # Surroundings at full power.
 # Static furniture (a high-back chair) that the segmenter calls "person": above this line, in face heights over
 # the chin (about the eyes), only the head is the person.
 EYE_LINE = 0.6
+# Below the line the allowed width grows from the head's this much per pixel down, so a chair is cut along a
+# shoulder-like slope instead of a flat shelf (which the aura turned into a box). Steep: shoulders are never cut.
+BODY_SLOPE = 3.0
 
 # Face Landmarker.
 NOSE, CHIN, FOREHEAD_TOP = 1, 152, 10
@@ -155,7 +158,7 @@ def head_ellipse(faces, width: int, height: int):
 
 
 def body_region(head, size: tuple[int, int], scale: tuple[float, float]) -> np.ndarray:
-    """Where the person can be: the head ellipse, and everything below the eye line.
+    """Where the person can be: the head ellipse, and below the eye line a region that widens fast.
 
     `size` is (width, height) of the output grid and `scale` maps frame pixels to it. Returns uint8 0/1.
     """
@@ -167,7 +170,9 @@ def body_region(head, size: tuple[int, int], scale: tuple[float, float]) -> np.n
     line = (cx - up[0] * (0.65 - EYE_LINE) * face_height, cy - up[1] * (0.65 - EYE_LINE) * face_height)
     xs = (np.arange(size[0], dtype=np.float32) + 0.5) / fx - line[0]
     ys = (np.arange(size[1], dtype=np.float32) + 0.5) / fy - line[1]
-    region = ((ys[:, None] * up[1] + xs[None, :] * up[0]) <= 0).astype(np.uint8)
+    below = -(ys[:, None] * up[1] + xs[None, :] * up[0])
+    across = np.abs(xs[None, :] * -up[1] + ys[:, None] * up[0])
+    region = ((below >= 0) & (across <= rx + BODY_SLOPE * below)).astype(np.uint8)
     cv2.ellipse(region, (int(round(cx * fx)), int(round(cy * fy))),
                 (max(1, int(round(rx * fx))), max(1, int(round(ry * fy)))), angle, 0, 360, 1, -1)
     return region
