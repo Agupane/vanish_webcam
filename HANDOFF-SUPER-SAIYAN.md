@@ -131,6 +131,8 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
   MediaPipe models). macOS jobs still queued (runner issue, §0). **Waiting for the owner gate E1.8.**
 - 2026-10-29: owner asked about hair and eyes; decided the import approach (E4.0). E3.3 + E4.1–E4.3 done in
   `ssj_face.py`; 111 tests pass on claude-bcn. Owner gates E1.8 and E4.4 can be done in the same session.
+- 2026-10-29: CI on `fbe2b51`: `ubuntu-latest` ✅, `windows-latest` ✅ and, this time, `macos-latest` (arm64) ✅ too:
+  the runner was assigned, so the §0 issue looks intermittent (runner availability), not the code.
 
 ## 0. Start here
 
