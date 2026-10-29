@@ -186,6 +186,43 @@ Linux-only. Trap: **OBS Virtual Camera is a DirectShow camera too**; if VanishCa
   without OBS Virtual Camera, the home window works with the mouse, the hair flow can be done without the terminal.
   *Docs done. Owner gate pending.*
 
+### START HERE: state at the end of the Windows session (2026-10-29)
+
+- Local clone on the owner's PC: `C:\Users\agust\VanishCam-ssj` (branch `feat/ssj-realism`, the Desktop shortcut
+  points here). **The commits after `0ae82e6` are local only, NOT pushed** (the owner said: commit, don't push). Ask
+  before pushing. The app shows its version (`git log -1 --format="%h (%cs)"`) in the home window, the side panel and
+  the terminal.
+- 168 tests pass on Windows (`.\.venv\Scripts\python.exe -m unittest discover -p "test_*.py"`; one Linux sysfs test
+  skips itself without symlink rights).
+- Owner's PC quirks: HTTPS is intercepted by a local root certificate, so use `git -c http.sslBackend=schannel ...`
+  and `UV_SYSTEM_CERTS=1` for uv. Webcam now `AUKEY PC-LM6`; "Camera (NVIDIA Broadcast)" and Meta Quest virtual
+  cameras also exist (Meta Quest hidden by `VIRTUAL_CAMERA_WORDS`). The owner has fair hair and green eyes (uses the
+  eye/brow switches). Personal test media in `ssj_hair/` (gitignored, never commit): `meet1-6.png`, `video.mp4`.
+- Reviewed with the owner on Windows: home window, camera picker, aura look (rounds meet1-6), golden hair import,
+  hair motion (video). Not yet formally approved: E1.8 / E4.4 / E6.5; ask for an explicit "aprobado".
+- **Owner requirement: everything must also work on macOS and Ubuntu.** All new code is OpenCV/NumPy only;
+  Windows-only bits are guarded (`pygrabber`, `use_arrow_cursor`, `os.startfile`; `copy_text` / `open_folder` have
+  macOS/Linux branches). Not yet run on a Mac or on Ubuntu after this session: verify there (CI runs the unit tests
+  on all three once pushed).
+
+**Next tasks, in order:**
+
+1. **E7, live controls (owner request, NOT started):** while running (phase `ready`), clickable buttons in the side
+   panel: **Recalibrate** (same as SPACE: `begin_calibration(now)` plus the log line), **Teal eyes on/off** and
+   **Golden eyebrows on/off** (toggle `args.ssj_eyes` / `args.ssj_brows`, keys `E` / `B`, persist into
+   `vanishcam_settings.json` keeping mode and camera, e.g. a new `home_ui.update_settings(path, **values)`). Plan: a
+   pure `panel_buttons(width, height, controls) -> [(name, rect)]` used both by `render_status_panel` (drawn at the
+   bottom of the panel; LOG fills the space above) and by `cv2.setMouseCallback(WINDOW_NAME, ...)`, which subtracts
+   the video width from x (the dashboard is video | panel) and acts on `EVENT_LBUTTONDOWN` (the owner's touchpad
+   drifts between press and release). Put the toggle states in the `status_panel` cache key. Add `E eyes  B brows` to
+   the KEYS text. `test_video_output.run_loop` must patch `cv2.setMouseCallback`. No buttons with `--no-hud` (keys
+   still work). Must work in Win32, Qt (Ubuntu) and Cocoa (macOS) OpenCV windows.
+2. Owner retest of the hair motion after `be4686c` (short fade, no pale tips) with a new screen recording; tune
+   `ssj_motion.SWAY_*`, `FLUTTER_*`, `TRACK_*`. Optical-flow tracking (plan P3) only if the hair still slides.
+3. Owner approvals E1.8 / E4.4 / E6.5 on Windows, then Ubuntu (and macOS if available), then push and a PR; the owner
+   merges.
+4. Installer fixes noted below (stale `$LASTEXITCODE` after the uv installer; TLS interception): ask first.
+
 ### Resume on Windows (owner's machine, from 2026-10-29)
 
 The owner continues on Windows with a new Claude Code session (the claude-bcn session cannot run on their PC). State
