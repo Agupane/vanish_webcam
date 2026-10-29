@@ -1,8 +1,91 @@
 # Handoff — Super Saiyan realism and real-time CPU performance
 
-Written 2026-10-29 for the next coding agent. This is an **evaluation and plan**: nothing in it has been implemented
-yet. Read [AGENTS.md](AGENTS.md) (rules, layout, testable seams), [ALGORITHMS.md](ALGORITHMS.md) (measured costs) and
-[HANDOFF.md](HANDOFF.md) (general status) first. Keep everything you write in the repo in English.
+Written 2026-10-29 for the next coding agent. The **execution plan** (step-by-step checklist, §E) comes first; the
+evaluation it is based on follows (§0–§8). Read [AGENTS.md](AGENTS.md) (rules, layout, testable seams),
+[ALGORITHMS.md](ALGORITHMS.md) (measured costs) and [HANDOFF.md](HANDOFF.md) (general status) first. Keep everything
+you write in the repo in English.
+
+## E. Execution plan
+
+Branch: **`feat/ssj-realism`** (the owner merges into `main`). Target platforms, in order: **Ubuntu and Windows
+first**; macOS only in phase E5, after the owner has approved the result on both. Tick a box only when its check has
+actually been run; write what you measured next to it. Every phase ends with a gate the owner has to pass.
+
+Checks that apply to every step: the full test suite passes (`.venv/bin/python -m unittest discover -p 'test_*.py'`),
+new pure functions have tests, CI is green on `ubuntu-latest` and `windows-latest` (macOS jobs may stay red/cancelled
+until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go into ALGORITHMS.md.
+
+### E1 — Visual foundations (§4.1, §4.2, §6.3)
+
+- [ ] **E1.1 The aura is not clipped by its crop.** Margins derived from the maximum aura radius plus the flame rise;
+  the field fades to zero before the crop border. *Check:* unit test — along the crop border the added light is 0;
+  render of the synthetic scene shows no straight vertical/horizontal cut.
+- [ ] **E1.2 Geometry cached per mask update.** Distance transforms, person mask at half resolution, rim and contour
+  points are recomputed only when a new mask arrives (10 Hz), not per output frame (30 Hz); compositing is
+  `cv2.blendLinear`/uint8. *Check:* unit test that a second frame with the same mask does not recompute the geometry;
+  `test_fast_enough_for_live_video` budget lowered and passing; ms/frame before/after in ALGORITHMS.md.
+- [ ] **E1.3 Static furniture removed from the silhouette.** `refine_person_mask(mask, frame, background, head)`: keep
+  only segmenter pixels that differ from the calibrated background, always keep a head/hair ellipse from the face
+  landmarks, fill holes, drop small fragments; return the input mask unchanged when the background is stale (camera
+  moved, light changed) or no face is known. *Check:* unit tests on a synthetic chair: chair removed, dark hair in front
+  of a dark chair kept, stale background → unchanged, no face → unchanged.
+- [ ] **E1.4 Darker surroundings while transformed.** Outside the person, the frame is darkened proportionally to the
+  aura intensity (~25 % at full power). *Check:* unit test — a far background pixel is darker, the person's interior is
+  unchanged, intensity 0 changes nothing.
+- [ ] **E1.5 Rim light on the person.** Warm light in a thin band inside the silhouette edge, stronger at the top;
+  exactly zero deeper inside. *Check:* unit test — edge pixel warmer, interior pixel identical.
+- [ ] **E1.6 Cel-shaded aura with flame tongues all around.** 3 flat tones (gold, yellow, near-white inner rim) with
+  short anti-aliased steps, drawn with alpha (visible on light walls, not only additive), tongues from upward-stretched
+  scrolling noise sampled in frame coordinates (stable when the bbox moves), tighter than today. *Check:* renders of the
+  synthetic scene on a light wall and a dark wall attached to the PR/commit message description; unit test that the
+  aura is yellow next to the silhouette, rises above the head and is zero far from it.
+- [ ] **E1.7 Docs.** README + GUIDE: turn off background blur/replacement in Meet/Zoom/Teams while using VanishCam;
+  the status panel says so while transformed. CHANGELOG + ALGORITHMS updated.
+- [ ] **E1.8 Gate (owner):** Ubuntu and Windows, real camera, Meet with background effects off: one screenshot on a
+  light wall, one in a darker room. Chair not wrapped, no visible lag in the aura when moving, no FPS drop compared to
+  `main`. Iterate on the look until the owner approves.
+
+### E2 — Fluidity (§5, §6)
+
+- [ ] **E2.1 Benchmark harness.** `--input-video PATH` (frames from a file, never written back) and `--bench N`
+  (per-stage p50/p95 ms and process CPU %). *Check:* runs on an owner-recorded clip on Ubuntu and Windows; baseline
+  numbers committed to ALGORITHMS.md.
+- [ ] **E2.2 Capture thread** that keeps only the latest frame. *Check:* unit test with a fake slow camera; bench shows
+  no queued/stale frames.
+- [ ] **E2.3 Async inference** (`RunningMode.LIVE_STREAM`, `detect_async`/`segment_async`, latest result reused).
+  *Check:* bench p95 frame time < 33 ms on the owner's machines; loop tests still pass with the fake clock.
+- [ ] **E2.4 Adaptive detection** (4–5 Hz with no hands, 12–15 Hz with hands, full rate during a hold; thumbnail motion
+  gate; face model only when a hand is near the head). *Check:* bench idle CPU before/after; owner confirms teleport,
+  Super Saiyan and power-down still trigger reliably.
+- [ ] **E2.5 Small items** (preview at 15 FPS, camera at working resolution, `apply_dissolve` uint8/ROI, cached speed
+  lines). *Check:* bench before/after.
+- [ ] **E2.6 Gate (owner):** bench numbers on Ubuntu and Windows in ALGORITHMS.md; no perceived latency on gestures.
+
+### E3 — Realism 2: flames mapped to the contour, eyes (§4.2, §4.3)
+
+- [ ] **E3.1 Contour mapping with a procedural tileable strip** (`distanceTransformWithLabels` + arc length +
+  `cv2.remap`). *Check:* unit tests (never inside the person, wraps around the whole outline, deterministic); renders.
+- [ ] **E3.2 Pre-rendered flame strip asset** (fire simulation with a toon shader, looping, tileable, < 3 MB, origin in
+  NOTICE.md). *Check:* loop has no visible seam; cost per frame ≤ E1 aura.
+- [ ] **E3.3 Iris tint** (teal/green, luminance-preserving, FaceLandmarker iris points 468–477). *Check:* unit test on
+  synthetic landmarks; owner screenshot.
+- [ ] **E3.4 Gate (owner)** on Ubuntu and Windows.
+
+### E4 — Golden hair (optional, §4.4)
+
+- [ ] **E4.0 Owner decision** on the local recolor and on the opt-in AI-generated hair (network call). Do not start
+  without it.
+- [ ] E4.1 Local hair recolor + spikes sprite anchored to the face. E4.2 (only if approved) opt-in personalised hair.
+
+### E5 — macOS (after E1–E3 are approved on Ubuntu and Windows)
+
+- [ ] E5.1 Owner fixes the `macos-latest` CI runner issue (§0); CI green on arm64 and Intel.
+- [ ] E5.2 `install.sh` end to end on a real Mac, OBS virtual camera, Meet test.
+- [ ] E5.3 Audio: watch for the duplicate SDL2 crash (HANDOFF.md §1). E5.4 `.app` build (`BUILD_MACOS.sh`).
+
+### Progress log
+
+- 2026-10-29: plan written; E1 started on `feat/ssj-realism`.
 
 ## 0. Start here
 
@@ -213,15 +296,10 @@ shows it, or running the same models through OpenVINO/ONNX Runtime with int8 wei
 Expected outcome of 1–3 (estimate, to confirm with the harness on the owner's machine): transformed from >1 core with
 jank to ~0.4–0.5 core at a steady 30 FPS; idle ~0.15 core.
 
-## 7. Suggested order of work
+## 7. Order of work
 
-1. Benchmark harness (§6.0) — needed to judge everything else.
-2. Threads + adaptive detection (§6.1–6.2).
-3. Aura caching + uint8 (§6.3), together with the foundations of §4.1 (background-difference mask, temporal smoothing,
-   darkened background, docs about call-app background blur).
-4. Rim light + eyes (§4.2). Ask the owner for a screenshot on a real call.
-5. Flame strip asset + contour mapping (§4.3).
-6. Hair (§4.4), only with the owner's OK for the opt-in part.
+See §E. The visible problems in the owner's screenshot are cheap to fix, so the visual foundations (E1) go before
+the benchmark harness (E2); E1 only touches the aura path and must not slow the loop down.
 
 ## 8. Stop and ask the owner when
 
