@@ -49,7 +49,7 @@ A stray single-frame gesture no longer makes you vanish, and after each effect y
 
 1. Make fists and hold them **at chest or belly height, one on each side of your body**, as if charging ki. Both fists and your face must be visible.
 2. Hold the pose for **1.5 seconds**: the image shakes, a small aura appears and the charge sound plays. If you let go early, it's cancelled.
-3. A white flash and you're **Super Saiyan**: golden hair and a yellow aura with rising flames and sparks, with a background hum.
+3. A white flash and you're **Super Saiyan**: spiked golden hair and a yellow aura with rising flames and sparks, with a background hum. Hold both clenched fists in front of your face, one on each side of the nose, for 1.5 seconds; repeat the pose (or press `S`) to go back to normal.
 4. To go back to normal, repeat the pose for 1.5 seconds or press `S`.
 
 - **Teleport:** if you teleport while transformed, you come back transformed.

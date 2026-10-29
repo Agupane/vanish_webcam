@@ -31,6 +31,11 @@ All notable changes to this fork are documented here. The format is based on
   `.ogg`, `.m4a`, `.flac`).
 - A side status panel next to the preview shows the next step, the keys and the recent events, so the terminal is
   optional. The Qt toolbar with its unreadable buttons and tooltips is hidden.
+- Super Saiyan: the hair is recolored gold and a procedural spiky crest stands it up; the charge pose accepts
+  both fists in front of the face (forehead to chin), not only at chest height. The last good face is reused for
+  a moment when the fists hide it, so the hair mask survives the pose. The aura GIF frames are cached, the
+  generated aura is skipped when the GIF is present and the person mask updates at 10 Hz, removing most of the
+  transformation lag.
 - Guided setup while the background is captured: the preview outlines the detected person, the panel says whether to
   step out, `P` pauses/resumes and `R` restarts the setup.
 - Super Saiyan uses the owner-supplied `assets/saiyanaura.gif` (screen-blended, watermark removed) and

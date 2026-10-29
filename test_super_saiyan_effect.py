@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import cv2
 import numpy as np
 
+import dragonball_effect
 import super_saiyan_effect as ssj
 import vanish_cam as app
 from test_video_output import run_loop
@@ -52,6 +53,11 @@ class ChargePoseTests(unittest.TestCase):
         self.assertTrue(ssj.charging_from_landmarks(
             [normalized(fist(200, 300)), normalized(fist(440, 300))], [normalized(face())], 640, 480))
 
+    def test_fists_in_front_of_the_face_charge(self):
+        for y in (90, 150, 200, 260):
+            with self.subTest(y=y):
+                self.assertTrue(ssj.charge_pose([fist(200, y), fist(440, y)], face(), 640, 480))
+
     def test_scale_and_position_invariance(self):
         for scale in (0.5, 1.0, 2.0):
             for shift in ((0, 0), (40, -30)):
@@ -66,7 +72,9 @@ class ChargePoseTests(unittest.TestCase):
             "one hand": [fist(200, 300)],
             "same side": [fist(200, 300), fist(240, 300)],
             "crossed to one side": [fist(420, 300), fist(460, 300)],
-            "above the chin": [fist(200, 150), fist(440, 150)],
+            "below the face": [fist(200, 420), fist(440, 420)],
+            "above the head": [fist(200, 20), fist(440, 20)],
+            "too far to the sides": [fist(80, 200), fist(560, 200)],
             "tiny hands": [fist(200, 300, scale=0.2), fist(440, 300, scale=0.2)],
             "one high one low": [fist(200, 300), fist(440, 420)],
         }
@@ -77,6 +85,30 @@ class ChargePoseTests(unittest.TestCase):
     def test_tension_counts_curled_fingers(self):
         self.assertEqual(ssj.hand_tension(fist(200, 300)), 4)
         self.assertEqual(ssj.hand_tension(fist(200, 300, open_hand=True)), 0)
+
+    def test_charge_uses_a_recent_face_when_the_fists_hide_it(self):
+        recognizer = SimpleNamespace(
+            last_teleport=False,
+            last_hands=[normalized(fist(200, 200)), normalized(fist(440, 200))],
+            last_faces=[],
+            last_size=(640, 480),
+            recent_faces=lambda timestamp_ms: [normalized(face())],
+        )
+        self.assertTrue(app.power_active(recognizer, 100))
+
+    def test_detector_remembers_the_face_for_a_moment(self):
+        hands = Mock()
+        hands.detect_for_video.return_value = SimpleNamespace(hand_landmarks=[])
+        faces = Mock()
+        faces.detect_for_video.return_value = SimpleNamespace(face_landmarks=[normalized(face())])
+        detector = dragonball_effect.InstantTransmissionDetector(hands, faces)
+        image = SimpleNamespace(width=640, height=480)
+        detector.detect(image, 0)
+        faces.detect_for_video.return_value = SimpleNamespace(face_landmarks=[])
+        detector.detect(image, 100)
+        self.assertEqual(detector.last_faces, [])
+        self.assertTrue(detector.recent_faces(100))
+        self.assertFalse(detector.recent_faces(1000))
 
     def test_teleport_wins_over_charge(self):
         recognizer = SimpleNamespace(
@@ -277,6 +309,39 @@ class SoundTests(unittest.TestCase):
         self.assertTrue((frame == 0).all())
         self.assertIsNone(ssj.load_aura_sprite(Path("does-not-exist.gif")))
 
+    def test_aura_frames_are_resized_once_per_size(self):
+        sprite = ssj.AuraSprite(ssj.AURA_SPRITE)
+        frame = np.zeros((72, 128, 3), np.uint8)
+        with patch.object(ssj.cv2, "resize", wraps=ssj.cv2.resize) as resize:
+            sprite.apply(frame, 1.0, 0.0)
+            calls = resize.call_count
+            sprite.apply(frame, 1.0, 0.0)
+            self.assertEqual(resize.call_count, calls)
+
+    def test_spikes_draw_gold_hair_above_the_hairline(self):
+        frame = np.full((240, 320, 3), 40, np.uint8)
+        hair = np.zeros((240, 320), np.float32)
+        hair[140:180, 120:200] = 1.0
+        output = ssj.spike_hair(frame, hair, 1.0, 0.0)
+        self.assertFalse(np.array_equal(output, frame))
+        above = output[70:130, 130:190]
+        self.assertTrue((above[:, :, 1] > 100).any())
+        self.assertTrue((above[:, :, 2] > 100).any())
+        self.assertTrue((frame == 40).all())
+
+    def test_spike_hair_without_a_mask_leaves_the_frame_alone(self):
+        frame = np.full((24, 32, 3), 7, np.uint8)
+        self.assertIs(ssj.spike_hair(frame, None, 1.0, 0.0), frame)
+        self.assertTrue((frame == 7).all())
+
+    def test_render_super_saiyan_accepts_no_generated_aura(self):
+        frame = np.zeros((72, 128, 3), np.uint8)
+        hair = np.zeros((72, 128), np.float32)
+        hair[10:30, 50:80] = 1.0
+        levels = ssj.PowerLevels(aura=1.0, hair=1.0)
+        output = ssj.render_super_saiyan(frame, person_in_middle(), hair, levels, 0.0, None)
+        self.assertEqual(output.shape, frame.shape)
+
     def test_vanish_sound_does_not_reinitialize_a_shared_mixer(self):
         mixer = Mock()
         mixer.get_init.return_value = (44100, -16, 2)
@@ -310,6 +375,23 @@ class SuperSaiyanLoopTests(unittest.TestCase):
         hum.stop.assert_any_call(500)
         self.assertTrue(any("Super Saiyan!" in line for line in printed))
         self.assertTrue(any("Back to normal" in line for line in printed))
+
+    def test_loop_stands_the_hair_up(self):
+        hair = np.zeros((24, 40), np.float32)
+        hair[2:10, 12:28] = 1.0
+        frames, shown, _, _, _ = run_loop(
+            mode="dragonball", power=lambda t: 6.0 <= t < 8.0,
+            mask=person_in_middle(), hair=hair, seconds=7.0)
+        self.assertTrue(np.any(shown[65] != frames[65]))
+
+    def test_gif_aura_replaces_the_generated_aura(self):
+        sprite = Mock()
+        sprite.apply.side_effect = lambda frame, *args, **kwargs: frame
+        with patch.object(app.ssj, "AuraRenderer") as renderer:
+            run_loop(mode="dragonball", power=lambda t: 6.0 <= t < 8.0,
+                     mask=person_in_middle(), seconds=9.0, aura_sprite=sprite)
+            renderer.assert_not_called()
+        sprite.apply.assert_called()
 
     def test_a_short_charge_does_not_transform(self):
         frames, shown, _, sound, _ = run_loop(

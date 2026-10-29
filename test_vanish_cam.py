@@ -300,7 +300,8 @@ class DashboardTests(unittest.TestCase):
 
         state.phase = "ready"
         action, key = status_snapshot(state, "dragonball", True, power, "pose", None)
-        self.assertEqual((action, key), ("pose", "ready"))
+        self.assertEqual(key, "ready")
+        self.assertIn("fists", action)
 
         power.transformed = True
         action, key = status_snapshot(state, "dragonball", True, power, "pose", None)

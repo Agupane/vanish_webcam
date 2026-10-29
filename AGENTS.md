@@ -15,7 +15,7 @@ result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_web
 | `vanish_cam.py` | Entry point: args, camera/virtual camera, model loading, gesture hold, main loop (state machine) |
 | `dragonball_effect.py` | Dragon Ball mode (default): Instant Transmission pose (two fingers on forehead), teleport render, generated sound |
 | `naruto_effect.py` | Naruto mode: joined palms, smoke + falling log, reverse effect to reappear |
-| `super_saiyan_effect.py` | Super Saiyan (inside Dragon Ball): charge-ki pose, `PowerState`, `AuraRenderer`, golden hair (`HairTracker`), synthesized sounds |
+| `super_saiyan_effect.py` | Super Saiyan (inside Dragon Ball): charge-ki pose, `PowerState`, `AuraRenderer`, spiked golden hair (`HairTracker`, `spike_hair`), synthesized sounds |
 | `vanish_sound.py` | Plays an effect sound (pygame, or `ffplay` fallback); `play(loops, fade_ms)`, `stop(fade_ms)`, `set_volume` |
 | `test_*.py` | unittest suite; `run_loop()` in `test_video_output.py` drives the real loop with a fake clock |
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
@@ -45,10 +45,11 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
   vanishes and brings the person back.
 - **While vanished:** the output is a frozen frame (background, plus the log in Naruto mode).
 - **Super Saiyan (Dragon Ball only):** a second state machine (`ssj.PowerState`: `off` → `charging` → `flash` →
-  `super` → `powering_down`) that runs only in `ready`. The charge pose (two fists at chest height, one on each side
+  `super` → `powering_down`) that runs only in `ready`. The charge pose (two clenched fists in front of the face, one on each side
   of the nose) is read from the same Hand/Face Landmarker result as the teleport (`power_active`; the teleport wins),
   held 1.5 s with its own `GestureHold`. Hair: `selfie_multiclass_256x256` in IMAGE mode on a head crop at 10 Hz
-  (`hair_mask`); without it only the aura is drawn. Teleporting while transformed keeps the golden hair and pauses
+  (`hair_mask`); `spike_hair` draws the standing gold crest on top, and the GIF aura replaces the generated one.
+  Without the hair model only the aura is drawn. Teleporting while transformed keeps the golden hair and pauses
   the hum.
 - **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear (restart setup while calibrating), `S` Super Saiyan on/off (Dragon Ball), `SPACE` recalibrate, `P` pause/resume, `F` fullscreen, `Q`/`ESC` quit.
 - **Guided setup:** during calibration the preview outlines the detected person (`draw_setup_marks`, HUD only) and the side panel says whether to step out; `P` freezes the loop and `R` restarts calibration.

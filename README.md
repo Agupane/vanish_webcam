@@ -14,7 +14,7 @@ This is a fork of [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_
 created VanishCam with its Normal and Naruto modes; all credit for the original idea and app goes to them (original
 README in [README_ORIGINAL.md](README_ORIGINAL.md)). This fork adds and changes:
 
-- **Dragon Ball mode** as the default (Instant Transmission), with a **Super Saiyan** transformation (aura and golden hair).
+- **Dragon Ball mode** as the default (Instant Transmission), with a **Super Saiyan** transformation (aura and spiked golden hair).
 - **Held, reversible gestures:** hold the pose to vanish, repeat it to come back, with reappear effects.
 - **Better background capture** that waits until you are out of the frame.
 - **Unmirrored output** to the virtual camera (the preview stays mirrored).

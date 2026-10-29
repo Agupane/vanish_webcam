@@ -105,6 +105,10 @@ class InstantTransmissionDetector:
         self.last_faces: list = []
         self.last_size = (0, 0)
         self.last_teleport = False
+        # The fists can hide the face from the landmarker: keep the last good
+        # face around so the charge pose still has a reference.
+        self.last_good_faces: list = []
+        self.last_good_face_ms = -10**9
 
     def detect(self, image, timestamp_ms: int) -> bool:
         hands = self.hands.detect_for_video(image, timestamp_ms).hand_landmarks
@@ -112,9 +116,20 @@ class InstantTransmissionDetector:
         self.last_hand_count = len(hands)
         self.last_face_found = bool(faces)
         self.last_hands, self.last_faces = hands, faces
+        if faces:
+            self.last_good_faces = faces
+            self.last_good_face_ms = timestamp_ms
         self.last_size = (image.width, image.height)
         self.last_teleport = instant_transmission(hands, faces, image.width, image.height)
         return self.last_teleport
+
+    def recent_faces(self, timestamp_ms: int, max_age_ms: int = 600) -> list:
+        """Current faces, or the last ones seen if they are still recent."""
+        if self.last_faces:
+            return self.last_faces
+        if self.last_good_faces and timestamp_ms - self.last_good_face_ms <= max_age_ms:
+            return self.last_good_faces
+        return []
 
     def close(self) -> None:
         try:

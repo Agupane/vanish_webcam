@@ -1034,22 +1034,30 @@ def create_hair_tracker() -> ssj.HairTracker | None:
     return ssj.HairTracker(segmenter)
 
 
-def power_active(recognizer) -> bool:
+def power_active(recognizer, timestamp_ms: int | None = None) -> bool:
     """Ki-charging pose in the detector's latest inference (the teleport wins)."""
     if getattr(recognizer, "last_teleport", False):
         return False
     width, height = getattr(recognizer, "last_size", (0, 0))
+    faces = getattr(recognizer, "last_faces", [])
+    recent = getattr(recognizer, "recent_faces", None)
+    if not faces and recent is not None and timestamp_ms is not None:
+        faces = recent(timestamp_ms)
     return ssj.charging_from_landmarks(
-        getattr(recognizer, "last_hands", []), getattr(recognizer, "last_faces", []), width, height
+        getattr(recognizer, "last_hands", []), faces, width, height
     )
 
 
 def hair_mask(tracker: ssj.HairTracker | None, recognizer, frame: np.ndarray,
-              now: float) -> np.ndarray | None:
+              now: float, timestamp_ms: int | None = None) -> np.ndarray | None:
     if tracker is None:
         return None
     width, height = getattr(recognizer, "last_size", (0, 0))
-    face = ssj.face_points(getattr(recognizer, "last_faces", []), width, height)
+    faces = getattr(recognizer, "last_faces", [])
+    recent = getattr(recognizer, "recent_faces", None)
+    if not faces and recent is not None and timestamp_ms is not None:
+        faces = recent(timestamp_ms)
+    face = ssj.face_points(faces, width, height)
     if face is not None and (width, height) != (frame.shape[1], frame.shape[0]):
         face = None
     return tracker.update(frame, face, now)
@@ -1157,7 +1165,9 @@ def status_snapshot(state, mode: str, super_saiyan: bool, power, gesture_help: s
         if super_saiyan and power.transformed:
             return "Super Saiyan! Repeat the pose or press S to power down.", "super"
         if super_saiyan and power.phase == "charging":
-            return "Charging ki... keep the pose until the flash.", "charging"
+            return "Charging ki... keep both fists in front of your face.", "charging"
+        if super_saiyan:
+            return f"{gesture_help} Or both fists in front of your face: Super Saiyan.", "ready"
         return gesture_help, "ready"
     if state.phase == "vanished":
         return "You are vanished. Repeat the gesture or press R to come back.", "vanished"
@@ -1250,8 +1260,9 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     super_saiyan = mode == "dragonball"
     power = ssj.PowerState()
     power_hold = GestureHold(ssj.CHARGE_SECONDS)
-    aura = ssj.AuraRenderer() if super_saiyan else None
     aura_sprite = ssj.load_aura_sprite() if super_saiyan else None
+    # The GIF already provides the aura: skip the generated one to save CPU.
+    aura = ssj.AuraRenderer() if super_saiyan and aura_sprite is None else None
     hair_tracker = None
     charge_sound = transform_sound = hum_sound = None
     if super_saiyan:
@@ -1305,7 +1316,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     log("[Webcam] Step out of the frame: the background photo is taken in 4 seconds.")
     log(f"[Webcam] {gesture_help}")
     if super_saiyan:
-        log("[Webcam] Closed fists at chest height, one on each side, for 1.5 seconds: Super Saiyan. "
+        log("[Webcam] Closed fists in front of your face, one on each side, for 1.5 seconds: Super Saiyan. "
             "Repeat (or press S) to go back to normal.")
     log("[Webcam] Keys in the window: V vanish, R reappear/restart setup, S Super Saiyan, "
         "SPACE background, P pause, F fullscreen, Q quit.")
@@ -1430,7 +1441,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 """With Super Saiyan active, the teleport carries the golden hair along."""
                 if not (super_saiyan and power.transformed):
                     return frame
-                return ssj.recolor_hair(frame, hair_mask(hair_tracker, recognizer, frame, now), 1.0)
+                return ssj.recolor_hair(frame, hair_mask(hair_tracker, recognizer, frame, now, elapsed_ms), 1.0)
 
             def update_mask(every: float) -> np.ndarray | None:
                 nonlocal last_mask, last_mask_at
@@ -1499,7 +1510,10 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     elif hold.since is None:
                         hold_announced = False
                     if super_saiyan and state.phase == "ready":
-                        charging = power_active(recognizer)
+                        charging = power_active(recognizer, elapsed_ms)
+                        if debug:
+                            print(f"[Super Saiyan] hands={recognizer.last_hand_count}, "
+                                  f"face={recognizer.last_face_found}, charging={charging}")
                         was_charging = power_hold.since is not None
                         if power_hold.update(charging, now):
                             if power.transformed:
@@ -1580,8 +1594,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
 
                 if super_saiyan and state.phase == "ready" and power.phase != "off":
                     levels = power.levels(now)
-                    hair = hair_mask(hair_tracker, recognizer, camera_frame, now) if levels.hair > 0 else None
-                    mask = update_mask(0.05)
+                    hair = hair_mask(hair_tracker, recognizer, camera_frame, now, elapsed_ms) if levels.hair > 0 else None
+                    mask = update_mask(0.1)
                     display = ssj.render_super_saiyan(
                         camera_frame, mask, hair, levels, now, aura
                     )
