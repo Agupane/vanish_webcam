@@ -26,6 +26,17 @@ All notable changes to this fork are documented here. The format is based on
 - `--list-cameras` and a camera picker window with a live preview when several webcams are found: the preview no
   longer silently uses a disabled laptop camera instead of a USB one (change with `A`/`D` or arrows, `Enter` to start,
   `Q` to cancel).
+- Dragon Ball now uses `assets/teleport.mp3`, copied from the `bernardocm10/vanish_webcam` fork at the owner's
+  request (not MIT; see NOTICE.md). Custom sounds are found whatever the extension case (`.MP3`, `.mp3`, `.wav`,
+  `.ogg`, `.m4a`, `.flac`).
+- A side status panel next to the preview shows the next step, the keys and the recent events, so the terminal is
+  optional. The Qt toolbar with its unreadable buttons and tooltips is hidden.
+- Guided setup while the background is captured: the preview outlines the detected person, the panel says whether to
+  step out, `P` pauses/resumes and `R` restarts the setup.
+- Super Saiyan uses the owner-supplied `assets/saiyanaura.gif` (screen-blended, watermark removed) and
+  `assets/ssj_transform.mp3` (not MIT; see NOTICE.md).
+- Ubuntu installs the app icon (`assets/vanish_icon.png`) and uses it for the Applications menu entry instead of the
+  generic camera icon.
 - `requirements.lock.txt`: pinned dependencies with hashes, installed with `--require-hashes` by every installer and by
   CI. The installers also verify the SHA-256 of the pinned uv installer and accept `VANISHCAM_REF` to install a tag or
   commit instead of `main`.

@@ -8,6 +8,7 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 V4L2LOOPBACK_VERSION=0.13.2
 DESKTOP_FILE="$HOME/.local/share/applications/vanishcam.desktop"
+ICON_FILE="$HOME/.local/share/icons/hicolor/256x256/apps/vanishcam.png"
 
 # modinfo, depmod and modprobe live in /usr/sbin, which is not always in a normal user's PATH.
 export PATH="$PATH:/usr/sbin:/sbin"
@@ -28,6 +29,7 @@ fi
 
 say "This will remove:"
 printf '  - %s\n' "$DESKTOP_FILE"
+printf '  - %s\n' "$ICON_FILE"
 printf '  - /etc/modules-load.d/vanishcam.conf\n'
 printf '  - /etc/modprobe.d/vanishcam.conf\n'
 printf '  - the v4l2loopback %s module built by the installer, if it is present\n' "$V4L2LOOPBACK_VERSION"
@@ -42,6 +44,11 @@ fi
 if [[ -f $DESKTOP_FILE ]]; then
   rm -f "$DESKTOP_FILE"
   say "Removed the Applications menu entry."
+fi
+if [[ -f $ICON_FILE ]]; then
+  rm -f "$ICON_FILE"
+  gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+  say "Removed the application icon."
 fi
 
 for file in /etc/modules-load.d/vanishcam.conf /etc/modprobe.d/vanishcam.conf; do

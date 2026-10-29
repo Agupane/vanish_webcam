@@ -50,7 +50,8 @@ These come from [AGENTS.md](AGENTS.md); pull requests that break them will be as
   The tests patch `cv2.putText` to fail.
 - **English only**: terminal messages, docs, code comments, docstrings and tests.
 - **No copyrighted anime assets.** Sounds are synthesized in code; users may drop their own files in `assets/`
-  (`teleport.MP3`, `ssj_*.MP3`), which are never committed.
+  (`teleport.*`, `ssj_*.MP3`). `assets/teleport.mp3` is the only audio asset committed here, taken from
+  `bernardocm10/vanish_webcam` at the owner's request and not covered by the MIT license (see NOTICE.md).
 - **MediaPipe timestamps:** VIDEO-mode tasks need strictly increasing timestamps, so run each task at most once per frame.
 - **Keep the loop testable** through the patchable seams listed in AGENTS.md (`gesture_active`, `person_mask`,
   `open_camera`, `open_virtual_camera`, `VanishSound`, ...), and add tests for new behavior.

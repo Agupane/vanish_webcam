@@ -50,21 +50,26 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
   held 1.5 s with its own `GestureHold`. Hair: `selfie_multiclass_256x256` in IMAGE mode on a head crop at 10 Hz
   (`hair_mask`); without it only the aura is drawn. Teleporting while transformed keeps the golden hair and pauses
   the hum.
-- **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear, `S` Super Saiyan on/off (Dragon Ball), `SPACE` recalibrate, `F` fullscreen, `Q`/`ESC` quit.
+- **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear (restart setup while calibrating), `S` Super Saiyan on/off (Dragon Ball), `SPACE` recalibrate, `P` pause/resume, `F` fullscreen, `Q`/`ESC` quit.
+- **Guided setup:** during calibration the preview outlines the detected person (`draw_setup_marks`, HUD only) and the side panel says whether to step out; `P` freezes the loop and `R` restarts calibration.
 - **Mirroring:** the preview is mirrored; the virtual camera gets the unmirrored image unless `--mirror-output`.
+- **Status panel:** `render_status_panel` + `compose_dashboard` add a side panel with the next step, keys and recent
+  events; `--no-hud` shows the video alone. The virtual camera only ever receives the clean `display` frame.
 - **Audio:** `--audio-device NAME` is passed to `pygame.mixer.init(devicename=...)` for the effect sounds (ignored by the `ffplay` fallback and when another sound already owns the mixer, which is the normal case: the first sound initializes it with the device).
 
 ## Rules
 
 - Never draw text or UI on the video (preview or virtual camera); tests patch `cv2.putText` to fail. Messages go to the terminal.
 - Everything is in English: terminal messages, docs, code comments, docstrings and tests.
-- Do not add copyrighted anime audio or frames. The teleport sound is synthesized in `write_teleport_sound`; a user may drop their own `assets/teleport.MP3`, which takes precedence.
+- Do not add more copyrighted anime audio or frames. `assets/teleport.mp3` (copied from `bernardocm10/vanish_webcam` at
+  the owner's request, not MIT) is the only exception; everything else is synthesized. Users may drop their own
+  `assets/teleport.*` and `assets/ssj_*.{MP3,mp3,wav,ogg,m4a,flac}`, which take precedence.
 - MediaPipe VIDEO-mode tasks need strictly increasing timestamps: run each task at most once per frame.
 - Keep the loop testable: patchable seams are `gesture_active`, `person_mask`, `person_in_frame`, `create_tasks`,
   `open_camera`, `open_virtual_camera`, `VanishSound`, `teleport_sound_path`, `power_active`, `hair_mask`,
   `create_hair_tracker` and `ssj_sound_paths`.
 - Super Saiyan sounds are synthesized too (`write_charge_sound`, `write_transform_sound`, `write_aura_hum`);
-  `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` and `assets/ssj_aura.MP3` override them.
+  `assets/ssj_charge.*`, `assets/ssj_transform.*` and `assets/ssj_aura.*` override them.
 
 ## License
 

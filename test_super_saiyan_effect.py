@@ -267,6 +267,16 @@ class SoundTests(unittest.TestCase):
                 frequency=44100, size=-16, channels=2, buffer=256, devicename="BlackHole 2ch")
             player.close()
 
+    def test_aura_gif_is_blended_and_the_watermark_is_removed(self):
+        sprite = ssj.AuraSprite(ssj.AURA_SPRITE)
+        self.assertFalse(sprite.frames[0][-4:, :20].any())
+        frame = np.zeros((72, 128, 3), np.uint8)
+        blended = sprite.apply(frame, 1.0, 0.0)
+        self.assertEqual(blended.shape, frame.shape)
+        self.assertGreater(int(blended.max()), 0)
+        self.assertTrue((frame == 0).all())
+        self.assertIsNone(ssj.load_aura_sprite(Path("does-not-exist.gif")))
+
     def test_vanish_sound_does_not_reinitialize_a_shared_mixer(self):
         mixer = Mock()
         mixer.get_init.return_value = (44100, -16, 2)

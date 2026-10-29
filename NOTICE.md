@@ -50,7 +50,17 @@ share of current lines last written upstream, per `git blame`:
 `AVVIA_OBS.bat`, `AVVIA_VIRTUAL.bat`, `assets/substitution_log.png`, `assets/vanish.MP3` and
 `assets/vanish_icon.ico` come from upstream unchanged. They are **not** covered by the MIT license. `assets/README.md`
 says the log sprite was generated with an image generation tool; the origin and terms of `vanish.MP3` and the icon are
-not documented upstream.
+not documented upstream. `assets/vanish_icon.png` is the same upstream icon converted to PNG for the Linux desktop
+entry; it is equally not MIT.
+
+### Assets from other forks (not MIT)
+
+`assets/teleport.mp3` and `assets/saiyanaura.gif` were copied at the owner's request from
+[bernardocm10/vanish_webcam](https://github.com/bernardocm10/vanish_webcam), which is a fork of the same unlicensed
+upstream and has no license of its own. It is used as the Dragon Ball teleport sound. Its origin is not documented
+there, so they may be third-party copyrighted material (the GIF has a StickNodes.com watermark); they are **not**
+covered by this fork's MIT license. Replace them with your own files of the same name if you redistribute this project.
+`assets/ssj_transform.mp3` is the Super Saiyan transformation sound supplied by the owner.
 
 ## MediaPipe models (Google, Apache-2.0)
 

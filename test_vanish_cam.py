@@ -7,8 +7,9 @@ import numpy as np
 import mediapipe as mp
 
 from vanish_cam import (
-    GestureHold, MultiViewGestureRecognizer, camera_source, find_linux_cameras,
-    linux_camera_label, mode_name, recognize_gesture, victory_landmark_score,
+    GestureHold, MultiViewGestureRecognizer, camera_source, compose_dashboard,
+    find_linux_cameras, linux_camera_label, mode_name, recognize_gesture,
+    render_status_panel, status_snapshot, victory_landmark_score,
 )
 
 
@@ -269,6 +270,47 @@ class LinuxCameraTests(unittest.TestCase):
             (device / "name").write_text("USB Camera\n")
             self.assertEqual(linux_camera_label("/dev/video2", Path(root)), "USB Camera")
             self.assertEqual(linux_camera_label("/dev/video9", Path(root)), "")
+
+
+class DashboardTests(unittest.TestCase):
+    def test_compose_keeps_the_video_untouched_on_the_left(self):
+        display = np.full((24, 40, 3), 7, np.uint8)
+        panel = np.full((24, 60, 3), 3, np.uint8)
+        view = compose_dashboard(display, panel)
+        self.assertEqual(view.shape, (24, 100, 3))
+        np.testing.assert_array_equal(view[:, :40], display)
+        np.testing.assert_array_equal(view[:, 40:], panel)
+        np.testing.assert_array_equal(display, np.full((24, 40, 3), 7, np.uint8))
+
+    def test_panel_is_resized_to_the_video_height(self):
+        view = compose_dashboard(np.zeros((30, 40, 3), np.uint8), np.zeros((10, 60, 3), np.uint8))
+        self.assertEqual(view.shape, (30, 100, 3))
+
+    def test_status_panel_has_the_requested_size(self):
+        panel = render_status_panel(380, 300, "dragonball", "ready", "/dev/video4",
+                                    "Two fingers on the forehead", ["Background ready."])
+        self.assertEqual(panel.shape, (300, 380, 3))
+
+    def test_status_snapshot_follows_the_phase(self):
+        state = SimpleNamespace(phase="calibrating")
+        power = SimpleNamespace(transformed=False, phase="off")
+        action, key = status_snapshot(state, "dragonball", False, power, "pose", 3)
+        self.assertEqual(key, "calibrating")
+        self.assertIn("3", action)
+
+        state.phase = "ready"
+        action, key = status_snapshot(state, "dragonball", True, power, "pose", None)
+        self.assertEqual((action, key), ("pose", "ready"))
+
+        power.transformed = True
+        action, key = status_snapshot(state, "dragonball", True, power, "pose", None)
+        self.assertEqual(key, "super")
+        self.assertIn("Super Saiyan", action)
+
+        state.phase = "vanished"
+        action, key = status_snapshot(state, "dragonball", False, power, "pose", None)
+        self.assertEqual(key, "vanished")
+        self.assertIn("R", action)
 
 
 if __name__ == "__main__":

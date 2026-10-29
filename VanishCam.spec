@@ -13,6 +13,10 @@ resources = [
     (root / "models" / "selfie_segmenter_landscape.tflite", "models"),
     (root / "assets" / "substitution_log.png", "assets"),
     (root / "assets" / "vanish.MP3", "assets"),
+    (root / "assets" / "teleport.mp3", "assets"),
+    (root / "assets" / "saiyanaura.gif", "assets"),
+    (root / "assets" / "ssj_transform.mp3", "assets"),
+    (root / "assets" / "vanish_icon.png", "assets"),
 ]
 # Super Saiyan without this model keeps the aura and skips the golden hair.
 optional = [

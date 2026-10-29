@@ -128,7 +128,7 @@ On Windows, run `install.ps1` again.
 | **Normal** (`--mode normal`) | V with index and middle fingers | 0.3 s |
 | **Naruto** (`--mode naruto`) | Palms together in front of the camera | 0.3 s |
 
-Keys (with the VanishCam window focused): `V` vanish, `R` reappear, `SPACE` retake the background photo, `F` fullscreen, `Q` quit.
+Keys (with the VanishCam window focused): `V` vanish, `R` reappear (or restart the setup while calibrating), `SPACE` retake the background photo, `P` pause/resume, `F` fullscreen, `Q` quit. A side panel next to the video shows the next step, the keys and the recent events (use `--no-hud` to hide it); while the background is being captured it also outlines the person so you know whether the camera sees you.
 
 **Several cameras?** When you start VanishCam and it finds more than one, it shows a window with a live preview: use `A`/`D` or the arrow keys to change camera, `Enter` to start and `Q` to cancel. You can also list them with `./vanishcam.sh --list-cameras` and force one with `./vanishcam.sh --camera 4` (or `--camera /dev/video4`).
 

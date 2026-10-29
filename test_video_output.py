@@ -73,6 +73,12 @@ def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
         mocks.enter_context(patch.object(app, "ssj_sound_paths", return_value=("c.wav", "t.wav", "h.wav")))
         mocks.enter_context(patch.object(app, "create_hair_tracker", return_value=None))
         mocks.enter_context(patch.object(app, "hair_mask", return_value=None))
+        mocks.enter_context(patch.object(app.ssj, "load_aura_sprite", return_value=None))
+        mocks.enter_context(patch.object(app, "draw_setup_marks", side_effect=lambda frame, mask: frame))
+        mocks.enter_context(patch.object(
+            app, "render_status_panel",
+            side_effect=lambda width, height, *args, **kwargs: np.zeros((height, width, 3), np.uint8)))
+        mocks.enter_context(patch.object(app, "compose_dashboard", side_effect=lambda display, panel: display))
         mocks.enter_context(patch.object(app, "power_active", side_effect=lambda *a: power(clock["t"])))
         opening = mocks.enter_context(patch.object(app, "open_virtual_camera", return_value=camera))
         mocks.enter_context(patch.object(app, "person_mask", return_value=person_mask))
@@ -173,6 +179,18 @@ class VideoLoopTests(unittest.TestCase):
         frames, shown, _, _, _ = run_loop(gesture=lambda t: 5.0 <= t < 5.15, seconds=8.0)
         for index in range(self.at(4.2), len(shown)):
             np.testing.assert_array_equal(shown[index], frames[index])
+
+    def test_pause_freezes_the_preview_and_play_resumes_it(self):
+        frames, shown, _, _, printed = run_loop(
+            keys={self.at(5.0): ord("p"), self.at(7.0): ord("p")}, seconds=8.0)
+        np.testing.assert_array_equal(shown[self.at(6.0)], shown[self.at(5.0)])
+        self.assertTrue(any("Paused" in line for line in printed))
+        self.assertTrue(any("Resumed" in line for line in printed))
+
+    def test_r_restarts_the_setup_while_calibrating(self):
+        _, _, _, _, printed = run_loop(
+            keys={self.at(1.0): ord("r")}, seconds=3.0, person=lambda t: t < 2.0)
+        self.assertTrue(any("Restarting the setup" in line for line in printed))
 
     def test_keys_v_and_r_still_work(self):
         frames, shown, _, _, _ = run_loop(keys={self.at(5.0): ord("v"), self.at(9.5): ord("r")})

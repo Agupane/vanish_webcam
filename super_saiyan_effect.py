@@ -206,6 +206,62 @@ class HairTracker:
 
 # ---------- aura ----------
 
+AURA_SPRITE = Path(__file__).resolve().parent / "assets" / "saiyanaura.gif"
+
+
+class AuraSprite:
+    """Optional animated aura (GIF) blended over the frame with a screen mode."""
+
+    def __init__(self, path: Path = AURA_SPRITE):
+        from PIL import Image
+
+        image = Image.open(path)
+        self.duration = max(0.03, image.info.get("duration", 40) / 1000.0)
+        self.frames: list[np.ndarray] = []
+        for index in range(getattr(image, "n_frames", 1)):
+            image.seek(index)
+            frame = np.asarray(image.convert("RGB"))[:, :, ::-1].copy()
+            height, width = frame.shape[:2]
+            # The source has a small watermark in the bottom-left corner.
+            frame[int(height * 0.93):, :int(width * 0.18)] = 0
+            self.frames.append(frame)
+        self.scaled: dict[tuple[int, int], list[np.ndarray]] = {}
+
+    def apply(self, frame: np.ndarray, intensity: float, t: float,
+              mask: np.ndarray | None = None) -> np.ndarray:
+        if intensity <= 0.0 or not self.frames:
+            return frame
+        source = self.frames[int(t / self.duration) % len(self.frames)]
+        height, width = frame.shape[:2]
+        output = frame.copy()
+        area = np.s_[0:height, 0:width]
+        if mask is not None:
+            points = cv2.findNonZero((mask > 0.3).astype(np.uint8))
+            if points is not None:
+                x, y, w, h = cv2.boundingRect(points)
+                aura_w = min(width, max(32, int(w * 1.8)))
+                aura_h = min(height, max(32, int(h * 2.0)))
+                left = min(max(0, x + w // 2 - aura_w // 2), width - aura_w)
+                top = min(max(0, y + h - aura_h), height - aura_h)
+                area = np.s_[top:top + aura_h, left:left + aura_w]
+        target = output[area]
+        sprite = cv2.resize(source, (target.shape[1], target.shape[0]), interpolation=cv2.INTER_LINEAR)
+        aura = sprite.astype(np.float32) / 255.0 * min(1.0, max(0.0, intensity))
+        base = target.astype(np.float32) / 255.0
+        output[area] = np.clip((1.0 - (1.0 - base) * (1.0 - aura)) * 255.0, 0, 255).astype(np.uint8)
+        return output
+
+
+def load_aura_sprite(path: Path = AURA_SPRITE) -> AuraSprite | None:
+    if not path.is_file():
+        return None
+    try:
+        return AuraSprite(path)
+    except Exception as error:
+        print(f"[Super Saiyan] Could not load the aura image ({error}); using the generated aura.")
+        return None
+
+
 class AuraRenderer:
     """Yellow aura with upward flames, pulse and sparks, at half resolution."""
 

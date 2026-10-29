@@ -341,14 +341,17 @@ say "Downloading MediaPipe models..."
 "$VENV_DIR/bin/python" -c "import sys; sys.path.insert(0, sys.argv[1]); import vanish_cam; vanish_cam.download_models('normal')" "$APP_DIR"
 
 say "Adding VanishCam to the applications menu..."
-mkdir -p "$HOME/.local/share/applications"
+ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+mkdir -p "$ICON_DIR" "$HOME/.local/share/applications"
+cp "$APP_DIR/assets/vanish_icon.png" "$ICON_DIR/vanishcam.png"
+gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
 cat > "$HOME/.local/share/applications/vanishcam.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=VanishCam
 Comment=Vanishing effects for your webcam (Zoom, Meet)
 Exec="$APP_DIR/vanishcam.sh"
-Icon=camera-web
+Icon=vanishcam
 Terminal=true
 Categories=AudioVideo;Video;
 EOF

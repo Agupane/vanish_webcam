@@ -54,18 +54,20 @@ A stray single-frame gesture no longer makes you vanish, and after each effect y
 
 - **Teleport:** if you teleport while transformed, you come back transformed.
 - **Golden hair:** uses an extra Google model downloaded the first time (16 MB). Without it, or if you're bald or wearing a cap, you only get the aura.
-- **Your own sounds:** put `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` or `assets/ssj_aura.MP3` and those are used instead of the generated ones.
+- **Your own sounds:** put `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` or `assets/ssj_aura.MP3` (also `.mp3`, `.wav`, `.ogg`, `.m4a` or `.flac`) and those are used instead of the generated ones. Dragon Ball uses `assets/teleport.mp3`.
 - **The sound plays through your speakers:** it doesn't travel through the virtual camera. Others in the call only hear it if your microphone picks it up (on Ubuntu, `--call-audio` fixes that; on Windows and macOS send it to a virtual cable with `--audio-device`; see [README.md](README.md)).
 
 | Key (with the preview window focused) | Action |
 |---|---|
 | `V` | vanish manually |
-| `R` | reappear manually |
+| `R` | reappear manually (restart the setup while calibrating) |
 | `S` | Super Saiyan on / off (Dragon Ball mode) |
 | `SPACE` | retake the background photo |
+| `P` | pause / resume (the preview freezes; the virtual camera keeps the last frame) |
 | `F` | fullscreen |
 | `Q` / `ESC` | quit |
 
+While the background is being captured, the preview outlines the person it detects and the side panel tells you whether to step out or wait; use `P` to pause or `R` to restart the setup.
 In the preview you see yourself mirrored, like in a mirror. Zoom and Meet get the image the right way round, so any text behind you reads correctly. If you'd rather send it mirrored, use `--mirror-output`.
 
 ### Zoom
@@ -85,6 +87,7 @@ Chrome only lists the camera once it's receiving video, so the app has to be sta
 ./vanishcam.sh --width 640 --height 360      # less load on older PCs
 ./vanishcam.sh --no-mirror                   # no mirroring, not even in the preview
 ./vanishcam.sh --mirror-output               # send the mirrored image to Zoom/Meet
+./vanishcam.sh --no-hud                      # hide the side panel with the log and steps
 ./vanishcam.sh --gesture-debug               # print the detected gesture in the terminal
 ./vanishcam.sh --call-audio                  # virtual microphone with your voice + the effects
 ./vanishcam.sh --audio-device "BlackHole 2ch" # play the effects into a virtual cable (Windows/macOS)
@@ -104,7 +107,7 @@ If you don't pass `--camera`, the first real webcam is used and the virtual came
 
 ## Differences from the original
 
-- **Dragon Ball mode (new, default):** the original README described it as *Goku*, but it wasn't in the code. It's implemented here; `--mode goku` also works. The teleport sound is generated on the fly; if you add your own `assets/teleport.MP3`, that one is used.
+- **Dragon Ball mode (new, default):** the original README described it as *Goku*, but it wasn't in the code. It's implemented here; `--mode goku` also works. The teleport sound comes from `assets/teleport.mp3`; if it is missing, a synthesized one is generated.
 - **Held gestures:** previously a single frame with the gesture was enough, which made you vanish by accident.
 - **Reappear with the gesture and with an effect:** previously it was only possible with `R`, without an effect.
 - **Better background photo:** collects 1.5 seconds of frames instead of half a second, and waits if someone is still there.

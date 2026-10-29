@@ -12,3 +12,15 @@ For smoke, the app uses its own procedurally animated shapes in
 `naruto_effect.py`. A [CC0 smoke sprite sheet](https://opengameart.org/content/smoke-sprite-sheet)
 was reviewed but is not included because the procedural smoke scales and follows
 the detected person dynamically.
+
+## Teleport sound
+
+`teleport.mp3` comes from [bernardocm10/vanish_webcam](https://github.com/bernardocm10/vanish_webcam)
+and is used by Dragon Ball mode. That repository has no license and the audio may be third-party material, so it is
+not covered by this fork's MIT license (see `NOTICE.md`). A user-provided file with the same name overrides it.
+
+## Super Saiyan aura
+
+`saiyanaura.gif` and `ssj_transform.mp3` were supplied by the owner. The GIF comes from a source that puts a
+StickNodes.com watermark in a corner, which the app blanks out before blending. Both are third-party material and are
+not covered by this fork's MIT license (see `NOTICE.md`). Replace them with your own files of the same names.

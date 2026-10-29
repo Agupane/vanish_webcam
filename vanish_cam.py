@@ -7,9 +7,11 @@ import hashlib
 import os
 import platform
 import sys
+import textwrap
 import time
 import urllib.error
 import urllib.request
+from collections import deque
 from dataclasses import dataclass, replace
 from contextlib import ExitStack
 from pathlib import Path
@@ -42,12 +44,14 @@ APP_DIR = Path(__file__).resolve().parent
 MODEL_DIR = APP_DIR / "models"
 WINDOW_NAME = "VanishCam - Preview"
 CAMERA_WINDOW = "VanishCam - Choose camera"
+PANEL_WIDTH = 380
 
 SEGMENTER_MODEL = MODEL_DIR / "selfie_segmenter_landscape.tflite"
 GESTURE_MODEL = MODEL_DIR / "gesture_recognizer.task"
 HAND_MODEL = APP_DIR / "hand_landmarker.task"
 FACE_MODEL = APP_DIR / "face_landmarker.task"
-TELEPORT_SOUND_FILES = (APP_DIR / "assets" / "teleport.MP3", MODEL_DIR / "teleport.wav")
+CUSTOM_SOUND_SUFFIXES = (".MP3", ".mp3", ".WAV", ".wav", ".OGG", ".ogg",
+                         ".M4A", ".m4a", ".FLAC", ".flac", ".OPUS", ".opus")
 # Multiclass segmentation (class 1 = hair) for the Super Saiyan's golden hair.
 MULTICLASS_MODEL = MODEL_DIR / "selfie_multiclass_256x256.tflite"
 SSJ_SOUNDS = {
@@ -223,6 +227,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=540, help="Video height")
     parser.add_argument(
         "--fullscreen", action="store_true", help="Start in fullscreen"
+    )
+    parser.add_argument(
+        "--no-hud", action="store_true",
+        help="Hide the side status panel (video only)",
     )
     parser.add_argument(
         "--no-mirror", action="store_true", help="Do not mirror the webcam"
@@ -459,23 +467,15 @@ def choose_camera_window(cameras: list[int | str], width: int, height: int) -> i
     if not cameras:
         return None
     selected = 0
+    panel_width = 360
     capture = _open_capture(cameras[selected], width, height)
-    cv2.namedWindow(CAMERA_WINDOW, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(CAMERA_WINDOW, width, height)
+    cv2.namedWindow(CAMERA_WINDOW, window_flags())
+    cv2.resizeWindow(CAMERA_WINDOW, width + panel_width, height)
     try:
         while True:
             frame = _camera_preview(capture, width, height)
-            device = cameras[selected]
-            label = linux_camera_label(device) if isinstance(device, str) else ""
-            title = f"{selected + 1}/{len(cameras)}  {device}"
-            if label:
-                title += f"  ({label})"
-            cv2.rectangle(frame, (0, 0), (width, 62), (18, 21, 26), -1)
-            cv2.putText(frame, title, (14, 26), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6, (238, 242, 245), 1, cv2.LINE_AA)
-            cv2.putText(frame, "A/D or arrows: change   Enter: start   Q: cancel",
-                        (14, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (170, 190, 200), 1, cv2.LINE_AA)
-            cv2.imshow(CAMERA_WINDOW, frame)
+            panel = render_camera_panel(panel_width, frame.shape[0], cameras, selected)
+            cv2.imshow(CAMERA_WINDOW, compose_dashboard(frame, panel))
             key = cv2.waitKey(30) & 0xFF
             if key in (10, 13, 32):
                 return cameras[selected]
@@ -503,7 +503,8 @@ def choose_camera_window(cameras: list[int | str], width: int, height: int) -> i
         cv2.destroyWindow(CAMERA_WINDOW)
 
 
-def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCapture:
+def open_camera(index: int | str | None, width: int, height: int,
+                info: dict | None = None) -> cv2.VideoCapture:
     system = platform.system()
     if index is None:
         cameras = find_linux_cameras() if system == "Linux" else []
@@ -515,8 +516,11 @@ def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCa
             index = cameras[0]
         else:
             index = 0
-        label = linux_camera_label(index) if isinstance(index, str) else ""
-        print(f"[Webcam] Using webcam {index}" + (f" ({label})" if label else "") + ".")
+    label = linux_camera_label(index) if isinstance(index, str) else ""
+    name = f"{index}" + (f" ({label})" if label else "")
+    if info is not None:
+        info["label"] = name
+    print(f"[Webcam] Using webcam {name}.")
 
     capture = _open_capture(index, width, height, system)
     if capture is None:
@@ -983,20 +987,30 @@ def person_in_frame(
     return float((mask > 0.5).mean()) > PERSON_AREA_LIMIT
 
 
-def teleport_sound_path() -> Path:
-    for path in TELEPORT_SOUND_FILES:
+def custom_sound(name: str) -> Path | None:
+    """User-provided sound in assets/<name>.<ext>, whatever the extension's case."""
+    for suffix in CUSTOM_SOUND_SUFFIXES:
+        path = APP_DIR / "assets" / f"{name}{suffix}"
         if path.is_file():
             return path
-    return dragonball.write_teleport_sound(TELEPORT_SOUND_FILES[-1])
+    return None
+
+
+def teleport_sound_path() -> Path:
+    custom = custom_sound("teleport")
+    if custom is not None:
+        return custom
+    generated = MODEL_DIR / "teleport.wav"
+    return generated if generated.is_file() else dragonball.write_teleport_sound(generated)
 
 
 def ssj_sound_paths() -> tuple[Path, Path, Path]:
     """Charge, transformation and hum: assets/<name>.MP3 if present, otherwise generated."""
     paths = []
     for name, writer in SSJ_SOUNDS.items():
-        custom = APP_DIR / "assets" / f"{name}.MP3"
+        custom = custom_sound(name)
         generated = MODEL_DIR / f"{name}.wav"
-        if custom.is_file():
+        if custom is not None:
             paths.append(custom)
         else:
             paths.append(generated if generated.is_file() else writer(generated))
@@ -1046,6 +1060,131 @@ def set_fullscreen(enabled: bool) -> None:
     cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, mode)
 
 
+PHASE_STYLES = {
+    "calibrating": ("CALIBRATING", (60, 190, 255)),
+    "ready": ("READY", (110, 220, 120)),
+    "vanishing": ("VANISHING", (220, 210, 90)),
+    "vanished": ("VANISHED", (175, 175, 175)),
+    "appearing": ("APPEARING", (220, 210, 90)),
+    "charging": ("CHARGING KI", (60, 190, 255)),
+    "super": ("SUPER SAIYAN", (60, 215, 255)),
+    "paused": ("PAUSED", (185, 185, 185)),
+}
+MODE_LABELS = {"dragonball": "Dragon Ball", "normal": "Normal vanish", "naruto": "Naruto"}
+
+
+def _wrap(text: str, chars: int) -> list[str]:
+    return textwrap.wrap(text, width=chars) or [""]
+
+
+def _panel_line(panel: np.ndarray, text: str, x: int, y: int,
+                scale: float = 0.52, color=(196, 204, 210), thickness: int = 1) -> int:
+    cv2.putText(panel, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
+    return y + int(round(24 * scale / 0.52))
+
+
+def render_status_panel(width: int, height: int, mode: str, phase: str, camera: str,
+                        action: str, lines: list[str]) -> np.ndarray:
+    """Side panel with the current step, keys and the recent messages."""
+    phase_label, accent = PHASE_STYLES.get(phase, ("READY", (110, 220, 120)))
+    panel = np.empty((height, width, 3), np.uint8)
+    panel[:] = (24, 27, 32)
+    cv2.line(panel, (0, 0), (0, height - 1), (70, 80, 90), 1)
+    x = 18
+    y = 34
+    y = _panel_line(panel, "VanishCam", x, y, 0.82, (240, 244, 247), 2)
+    y = _panel_line(panel, f"Mode: {MODE_LABELS.get(mode, mode)}", x, y, 0.5, (150, 165, 175))
+    y = _panel_line(panel, f"Camera: {camera}", x, y, 0.5, (150, 165, 175))
+    y += 8
+    y = _panel_line(panel, phase_label, x, y, 0.7, accent, 2)
+    y += 10
+    y = _panel_line(panel, "NEXT STEP", x, y, 0.46, (120, 135, 145))
+    for line in _wrap(action, 40):
+        y = _panel_line(panel, line, x, y, 0.56, (238, 242, 245))
+    y += 10
+    y = _panel_line(panel, "KEYS", x, y, 0.46, (120, 135, 145))
+    for line in ("V vanish   R reappear   S Super Saiyan",
+                 "P pause   SPACE background   F fullscreen",
+                 "R restart setup while calibrating   Q quit"):
+        y = _panel_line(panel, line, x, y, 0.48, (185, 195, 202))
+    y += 10
+    y = _panel_line(panel, "LOG", x, y, 0.46, (120, 135, 145))
+    room = max(0, (height - y - 12) // 18)
+    for message in list(lines)[-room:]:
+        for line in _wrap(message, 44):
+            if y > height - 12:
+                break
+            y = _panel_line(panel, line, x, y, 0.46, (150, 160, 168))
+    return panel
+
+
+def compose_dashboard(display: np.ndarray, panel: np.ndarray) -> np.ndarray:
+    """Video on the left, status panel on the right. The video pixels are untouched."""
+    if display.shape[0] != panel.shape[0]:
+        panel = cv2.resize(panel, (panel.shape[1], display.shape[0]), interpolation=cv2.INTER_NEAREST)
+    return np.hstack((display, panel))
+
+
+def render_camera_panel(width: int, height: int, cameras: list[int | str],
+                        selected: int) -> np.ndarray:
+    panel = np.empty((height, width, 3), np.uint8)
+    panel[:] = (24, 27, 32)
+    cv2.line(panel, (0, 0), (0, height - 1), (70, 80, 90), 1)
+    x = 18
+    y = 36
+    y = _panel_line(panel, "Choose camera", x, y, 0.72, (240, 244, 247), 2)
+    y += 8
+    for index, device in enumerate(cameras):
+        label = linux_camera_label(device) if isinstance(device, str) else ""
+        if index == selected:
+            cv2.rectangle(panel, (8, y - 19), (width - 8, y + 7), (52, 68, 80), -1)
+        color = (245, 248, 250) if index == selected else (170, 180, 188)
+        y = _panel_line(panel, f"{index + 1}. {device}", x, y, 0.54, color)
+        if label:
+            y = _panel_line(panel, f"   {label}", x, y, 0.44, (135, 150, 160))
+    y = max(y + 12, height - 96)
+    for line in ("A / D or arrows: change", "Enter: start", "Q: cancel"):
+        y = _panel_line(panel, line, x, y, 0.5, (190, 200, 208))
+    return panel
+
+
+def status_snapshot(state, mode: str, super_saiyan: bool, power, gesture_help: str,
+                    remaining: int | None) -> tuple[str, str]:
+    """Action to show in the panel and the phase style to use."""
+    if state.phase == "calibrating":
+        return f"SETUP: step out of the frame. Background photo in {remaining or 0} s.", "calibrating"
+    if state.phase == "ready":
+        if super_saiyan and power.transformed:
+            return "Super Saiyan! Repeat the pose or press S to power down.", "super"
+        if super_saiyan and power.phase == "charging":
+            return "Charging ki... keep the pose until the flash.", "charging"
+        return gesture_help, "ready"
+    if state.phase == "vanished":
+        return "You are vanished. Repeat the gesture or press R to come back.", "vanished"
+    if state.phase == "vanishing":
+        return "Vanishing...", "vanishing"
+    return "Coming back...", "appearing"
+
+
+def draw_setup_marks(frame: np.ndarray, mask: np.ndarray | None) -> np.ndarray:
+    """Outline the detected person while the background is being captured."""
+    if mask is None:
+        return frame
+    points = cv2.findNonZero((mask > 0.5).astype(np.uint8))
+    if points is None:
+        return frame
+    x, y, w, h = cv2.boundingRect(points)
+    cv2.rectangle(frame, (max(0, x - 8), max(0, y - 8)),
+                  (min(frame.shape[1] - 1, x + w + 8), min(frame.shape[0] - 1, y + h + 8)),
+                  (60, 190, 255), 2, cv2.LINE_AA)
+    return frame
+
+
+def window_flags() -> int:
+    # GUI_NORMAL hides the Qt toolbar with its unreadable zoom/save buttons and tooltips.
+    return cv2.WINDOW_NORMAL | getattr(cv2, "WINDOW_GUI_NORMAL", 0)
+
+
 def self_test() -> int:
     """Check bundled resources and model initialization without opening a webcam."""
     required = (SEGMENTER_MODEL, GESTURE_MODEL, HAND_MODEL, FACE_MODEL, SOUND_PATH)
@@ -1085,8 +1224,15 @@ def run() -> int:
 
 def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int:
     download_models(mode)
-    capture = open_camera(args.camera, args.width, args.height)
+    camera_info: dict[str, str] = {}
+    capture = open_camera(args.camera, args.width, args.height, camera_info)
+    camera_name = camera_info.get("label", "auto")
     resources.callback(capture.release)
+    log_lines: deque[str] = deque(maxlen=24)
+
+    def log(message: str) -> None:
+        print(message)
+        log_lines.append(message)
     capture.set(cv2.CAP_PROP_FPS, args.fps)
     segmenter, recognizer = create_tasks(mode)
     resources.callback(segmenter.close)
@@ -1105,6 +1251,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     power = ssj.PowerState()
     power_hold = GestureHold(ssj.CHARGE_SECONDS)
     aura = ssj.AuraRenderer() if super_saiyan else None
+    aura_sprite = ssj.load_aura_sprite() if super_saiyan else None
     hair_tracker = None
     charge_sound = transform_sound = hum_sound = None
     if super_saiyan:
@@ -1118,8 +1265,9 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         for extra in (charge_sound, transform_sound, hum_sound):
             resources.callback(extra.close)
     resources.callback(cv2.destroyAllWindows)
-    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WINDOW_NAME, args.width, args.height)
+    hud = not getattr(args, "no_hud", False)
+    cv2.namedWindow(WINDOW_NAME, window_flags())
+    cv2.resizeWindow(WINDOW_NAME, args.width + (PANEL_WIDTH if hud else 0), args.height)
 
     state = AppState(
         calibration_started=time.perf_counter(), fullscreen=args.fullscreen
@@ -1154,25 +1302,26 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         "normal": "V with index and middle fingers (hold it for a moment): you vanish. Repeat to come back.",
         "naruto": "Palms together (for a moment): you vanish. Repeat to come back.",
     }[mode]
-    print("[Webcam] Step out of the frame: the background photo is taken in 4 seconds.")
-    print(f"[Webcam] {gesture_help}")
+    log("[Webcam] Step out of the frame: the background photo is taken in 4 seconds.")
+    log(f"[Webcam] {gesture_help}")
     if super_saiyan:
-        print("[Webcam] Closed fists at chest height, one on each side, for 1.5 seconds: Super Saiyan. "
-              "Repeat (or press S) to go back to normal.")
-    print("[Webcam] Keys in the window: SPACE new background, R reappear, V vanish, F fullscreen, Q quit.")
+        log("[Webcam] Closed fists at chest height, one on each side, for 1.5 seconds: Super Saiyan. "
+            "Repeat (or press S) to go back to normal.")
+    log("[Webcam] Keys in the window: V vanish, R reappear/restart setup, S Super Saiyan, "
+        "SPACE background, P pause, F fullscreen, Q quit.")
 
     def transform(now: float) -> None:
         power.transform(now)
         charge_sound.stop(80)
         transform_sound.play()
         hum_sound.play(loops=-1, fade_ms=400)
-        print("[Dragon Ball] Super Saiyan!")
+        log("[Dragon Ball] Super Saiyan!")
 
     def power_down(now: float) -> None:
         power.power_down(now)
         charge_sound.stop()
         hum_sound.stop(500)
-        print("[Dragon Ball] Back to normal.")
+        log("[Dragon Ball] Back to normal.")
 
     def stop_power() -> None:
         power.reset()
@@ -1219,6 +1368,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 else:
                     hum_sound.play(loops=-1, fade_ms=400)
 
+    paused = False
+    last_display: np.ndarray | None = None
     try:
         while True:
             ok, camera_frame = capture.read()
@@ -1238,6 +1389,32 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
             if mode == "normal" and (dissolve_field is None or dissolve_field.shape != (height, width)):
                 dissolve_field, sparkle_noise = make_dissolve_fields(height, width)
             now = time.perf_counter()
+
+            if paused:
+                frozen = last_display if last_display is not None else camera_frame
+                panel = render_status_panel(
+                    PANEL_WIDTH, frozen.shape[0], mode, "paused", camera_name,
+                    "Paused. Press P to continue, R to restart the setup.", list(log_lines),
+                )
+                if virtual_camera is not None:
+                    send_virtual_frame(virtual_camera, cv2.flip(frozen, 1) if flip_output else frozen)
+                cv2.imshow(WINDOW_NAME, compose_dashboard(frozen, panel) if hud else frozen)
+                key = cv2.waitKey(30) & 0xFF
+                if key in (ord("q"), 27):
+                    break
+                if key in (ord("p"), ord("P")):
+                    paused = False
+                    log("[Webcam] Resumed.")
+                elif key == ord("r"):
+                    paused = False
+                    begin_calibration(now)
+                    log("[Webcam] Restarting the setup...")
+                elif key == ord("f"):
+                    state.fullscreen = not state.fullscreen
+                    set_fullscreen(state.fullscreen)
+                if virtual_camera is not None:
+                    virtual_camera.sleep_until_next_frame()
+                continue
 
             elapsed_ms = int((now - started) * 1000)
             mp_image = None
@@ -1267,7 +1444,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 elapsed = now - state.calibration_started
                 remaining = max(0, int(np.ceil(CALIBRATION_SECONDS - elapsed)))
                 if remaining != calibration_remaining:
-                    print(f"[Webcam] Background photo in {remaining} seconds.")
+                    log(f"[Webcam] Background photo in {remaining} seconds.")
                     calibration_remaining = remaining
                 sampling = elapsed >= CALIBRATION_SECONDS - BACKGROUND_SAMPLE_SECONDS
                 if sampling and now - last_person_check >= PERSON_CHECK_SECONDS:
@@ -1275,7 +1452,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     if (calibration_retries < MAX_CALIBRATION_RETRIES
                             and person_in_frame(segmenter, frame_image(), elapsed_ms, width, height)):
                         calibration_retries += 1
-                        print("[Webcam] Someone is still in the frame: step out, waiting 2 more seconds.")
+                        log("[Webcam] Someone is still in the frame: step out, waiting 2 more seconds.")
                         # Go back to before the sampling window.
                         state.calibration_started = (
                             now - (CALIBRATION_SECONDS - BACKGROUND_SAMPLE_SECONDS) + CALIBRATION_RETRY_SECONDS
@@ -1293,13 +1470,13 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     else:
                         background = camera_frame.copy()
                     if calibration_retries >= MAX_CALIBRATION_RETRIES:
-                        print("[Webcam] Could not capture the background with nobody in the frame; using it anyway. "
-                              "Press SPACE to retry.")
+                        log("[Webcam] Could not capture the background with nobody in the frame; using it anyway. "
+                            "Press SPACE to retry.")
                     background_samples.clear()
                     calibration_retries = 0
                     state.phase = "ready"
                     hold.reset()
-                    print("[Webcam] Background ready. You can step back into the frame.")
+                    log("[Webcam] Background ready. You can step back into the frame.")
 
             elif background is None:
                 begin_calibration(now)
@@ -1318,7 +1495,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                                      time.perf_counter())
                     elif mode == "dragonball" and hold.since is not None and not hold_announced:
                         hold_announced = True
-                        print(f"[Dragon Ball] Keep your fingers on your forehead for {HOLD_SECONDS[mode]:g} s...")
+                        log(f"[Dragon Ball] Keep your fingers on your forehead for {HOLD_SECONDS[mode]:g} s...")
                     elif hold.since is None:
                         hold_announced = False
                     if super_saiyan and state.phase == "ready":
@@ -1331,7 +1508,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                                 transform(now)
                         elif power_hold.since is not None and not was_charging and power.phase == "off":
                             charge_sound.play()
-                            print("[Dragon Ball] Charging ki...")
+                            log("[Dragon Ball] Charging ki...")
                         elif was_charging and power_hold.since is None and power.phase == "charging":
                             charge_sound.stop(150)
                 if super_saiyan:
@@ -1404,22 +1581,42 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 if super_saiyan and state.phase == "ready" and power.phase != "off":
                     levels = power.levels(now)
                     hair = hair_mask(hair_tracker, recognizer, camera_frame, now) if levels.hair > 0 else None
+                    mask = update_mask(0.05)
                     display = ssj.render_super_saiyan(
-                        camera_frame, update_mask(0.05), hair, levels, now, aura
+                        camera_frame, mask, hair, levels, now, aura
                     )
+                    if aura_sprite is not None:
+                        display = aura_sprite.apply(display, levels.aura, now, mask)
 
+            view_display = display
+            if hud and state.phase == "calibrating":
+                view_display = draw_setup_marks(display.copy(), update_mask(0.3))
+            last_display = view_display
             if virtual_camera is not None:
                 # Zoom and Meet already mirror the local preview: viewers see the image the right way round.
                 send_virtual_frame(virtual_camera, cv2.flip(display, 1) if flip_output else display)
-            cv2.imshow(WINDOW_NAME, display)
+            action, phase_key = status_snapshot(
+                state, mode, super_saiyan, power, gesture_help, calibration_remaining
+            )
+            panel = render_status_panel(
+                PANEL_WIDTH, display.shape[0], mode, phase_key, camera_name, action, list(log_lines)
+            )
+            cv2.imshow(WINDOW_NAME, compose_dashboard(view_display, panel) if hud else view_display)
 
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
                 break
-            if key == ord(" "):
+            if key in (ord("p"), ord("P")):
+                paused = True
+                log("[Webcam] Paused. Press P to continue.")
+            elif key == ord(" "):
                 begin_calibration(now)
-                print("[Webcam] Step out of the frame: the new background photo is taken in 4 seconds.")
+                log("[Webcam] Step out of the frame: the new background photo is taken in 4 seconds.")
+            elif key == ord("r") and (background is None or state.phase == "calibrating"):
+                begin_calibration(now)
+                log("[Webcam] Restarting the setup...")
             elif key == ord("r") and background is not None:
+                log("[Webcam] Reappear (R).")
                 if state.phase == "vanished":
                     start_effect("appearing", time.perf_counter())
                 elif state.phase == "vanishing":
@@ -1428,6 +1625,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     vanished_frame = None
                     log_anchor = None
             elif key == ord("v") and background is not None and state.phase in ("ready", "appearing"):
+                log("[Webcam] Vanish (V).")
                 log_anchor = None
                 start_effect("vanishing", time.perf_counter())
             elif key == ord("s") and super_saiyan and background is not None and state.phase == "ready":
