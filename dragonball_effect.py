@@ -100,13 +100,21 @@ class InstantTransmissionDetector:
         self.faces = faces
         self.last_hand_count = 0
         self.last_face_found = False
+        # L'ultima inferenza, riusata dalla trasformazione Super Saiyan senza rifarla.
+        self.last_hands: list = []
+        self.last_faces: list = []
+        self.last_size = (0, 0)
+        self.last_teleport = False
 
     def detect(self, image, timestamp_ms: int) -> bool:
         hands = self.hands.detect_for_video(image, timestamp_ms).hand_landmarks
         faces = self.faces.detect_for_video(image, timestamp_ms).face_landmarks
         self.last_hand_count = len(hands)
         self.last_face_found = bool(faces)
-        return instant_transmission(hands, faces, image.width, image.height)
+        self.last_hands, self.last_faces = hands, faces
+        self.last_size = (image.width, image.height)
+        self.last_teleport = instant_transmission(hands, faces, image.width, image.height)
+        return self.last_teleport
 
     def close(self) -> None:
         try:

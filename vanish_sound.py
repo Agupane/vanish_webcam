@@ -1,4 +1,4 @@
-"""Preload the Naruto MP3 and play it without blocking video frames."""
+"""Preload an effect sound and play it without blocking video frames."""
 
 from __future__ import annotations
 
@@ -39,14 +39,16 @@ class VanishSound:
                 mixer.quit()
             raise RuntimeError(f"No pude abrir el audio: {error}") from error
 
-    def play(self) -> None:
+    def play(self, loops: int = 0, fade_ms: int = 0) -> None:
+        """Play from the start; loops=-1 repeats until stop()."""
         if self.ffplay is not None:
-            if self.process is not None and self.process.poll() is None:
-                self.process.terminate()
+            self._stop_process()
+            command = [self.ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet"]
+            if loops:
+                command += ["-loop", "0" if loops < 0 else str(loops + 1)]
             try:
                 self.process = subprocess.Popen(
-                    [self.ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet",
-                     "-i", str(self.path)],
+                    command + ["-i", str(self.path)],
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -55,13 +57,30 @@ class VanishSound:
                 raise RuntimeError(f"No pude reproducir el audio: {error}") from error
             return
         self.sound.stop()
-        if self.sound.play() is None:
+        if self.sound.play(loops=loops, fade_ms=fade_ms) is None:
             raise RuntimeError("No pude reproducir el audio: no hay canales libres.")
+
+    def stop(self, fade_ms: int = 0) -> None:
+        if self.ffplay is not None:
+            self._stop_process()
+            return
+        if fade_ms > 0:
+            self.sound.fadeout(fade_ms)
+        else:
+            self.sound.stop()
+
+    def set_volume(self, volume: float) -> None:
+        # ffplay has no live volume control; only the pygame path honours it.
+        if self.ffplay is None:
+            self.sound.set_volume(max(0.0, min(1.0, volume)))
+
+    def _stop_process(self) -> None:
+        if self.process is not None and self.process.poll() is None:
+            self.process.terminate()
 
     def close(self) -> None:
         if self.ffplay is not None:
-            if self.process is not None and self.process.poll() is None:
-                self.process.terminate()
+            self._stop_process()
             return
         if self.owns_mixer:
             self.mixer.quit()
