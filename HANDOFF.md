@@ -11,7 +11,7 @@ State as of 2026-10-29 (main around `11c4d3f`). Read `AGENTS.md` first: layout, 
 | Ubuntu installer | Rewritten for the owner's machine (22.04, HWE kernel 6.8, Secure Boot likely). **Not yet run on real hardware** after the rewrite. |
 | Windows / macOS installers | `install.ps1` / `install.sh`. Only syntax-checked; never run end to end on a real machine. |
 | Language | Everything is English (code, messages, docs). Keep it that way. |
-| Licensing | Upstream (Nicovic17/vanish_webcam) has **no license**. A LICENSE (MIT for this fork's contributions) + NOTICE.md + CONTRIBUTING/CODE_OF_CONDUCT/SECURITY/CHANGELOG/issue templates were being added in parallel — check `git log` for that commit before touching those files. |
+| Licensing | Upstream (Nicovic17/vanish_webcam) has **no license**. Commit `2a72169` added LICENSE (MIT for this fork's contributions only, with a scope paragraph), NOTICE.md (per-file upstream/fork split, third-party licenses), CHANGELOG, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY and issue/PR templates. Keep NOTICE.md and CHANGELOG.md up to date. |
 
 ## 1. macOS arm64 crash (highest priority)
 
@@ -62,6 +62,10 @@ Nothing has run against a real webcam. Tunables to adjust once someone tries it:
 - *Particles* mode from the upstream README was never implemented.
 - `VanishCam.spec` / `BUILD_WINDOWS.bat` (PyInstaller) are upstream leftovers; untested with the new modules and assets.
 - Ask the upstream author to add a license (owner's decision; don't contact anyone without asking).
+- pyvirtualcam is **GPL-2.0**: fine for the MIT source (users install it from PyPI), but any packaged binary (PyInstaller `.exe`) that bundles it must comply with GPL-2.0, or pyvirtualcam must be replaced. See NOTICE.md.
+- Owner action: enable "Private vulnerability reporting" (Settings → Security), which SECURITY.md and the issue templates link to.
+- GitHub may not detect LICENSE as MIT because of its scope paragraph. If that matters, keep LICENSE as plain MIT and move the scope note to NOTICE.md/README only.
+- CHANGELOG entries without a commit hash (virtual mic, unmirrored output, background capture): fill in hashes from `git log`.
 
 ## Dev environment notes
 
