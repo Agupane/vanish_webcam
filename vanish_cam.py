@@ -1006,17 +1006,22 @@ def ssj_sound_paths() -> tuple[Path, Path, Path]:
     return tuple(paths)
 
 
+def latest_faces(recognizer, timestamp_ms: int | None = None) -> list:
+    """The detector's latest face, or a recent one when the hands hide it."""
+    faces = getattr(recognizer, "last_faces", [])
+    recent = getattr(recognizer, "recent_faces", None)
+    if not faces and recent is not None and timestamp_ms is not None:
+        faces = recent(timestamp_ms)
+    return faces if isinstance(faces, list) else []
+
+
 def power_active(recognizer, timestamp_ms: int | None = None) -> bool:
     """Ki-charging pose in the detector's latest inference (the teleport wins)."""
     if getattr(recognizer, "last_teleport", False):
         return False
     width, height = getattr(recognizer, "last_size", (0, 0))
-    faces = getattr(recognizer, "last_faces", [])
-    recent = getattr(recognizer, "recent_faces", None)
-    if not faces and recent is not None and timestamp_ms is not None:
-        faces = recent(timestamp_ms)
     return ssj.charging_from_landmarks(
-        getattr(recognizer, "last_hands", []), faces, width, height
+        getattr(recognizer, "last_hands", []), latest_faces(recognizer, timestamp_ms), width, height
     )
 
 
@@ -1551,7 +1556,9 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 if super_saiyan and state.phase == "ready" and power.phase != "off":
                     levels = power.levels(now)
                     mask = update_mask(0.1)
-                    display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura)
+                    # The background plate and the head let the aura drop the chair from the silhouette.
+                    head = ssj.head_ellipse(latest_faces(recognizer, elapsed_ms), width, height)
+                    display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura, background, head)
 
             view_display = display
             if hud and state.phase == "calibrating":

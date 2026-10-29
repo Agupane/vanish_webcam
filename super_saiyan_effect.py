@@ -15,24 +15,48 @@ CHARGE_SECONDS = 1.5
 FLASH_SECONDS = 0.45
 POWER_DOWN_SECONDS = 0.6
 AURA_SCALE = 0.5
-AURA_RADIUS = 22.0  # At half resolution.
+# Sizes below are in pixels at AURA_SCALE (half resolution).
+AURA_RADIUS = 13.0
+FLAME_RISE = 3.0  # How far the flames climb above the body, in radii.
+MAX_RADIUS_SCALE = 2.5 * 1.15  # Flash radius times the pulse: sizes the crop.
+RIM_WIDTH = 6.0
+RIM_ALPHA = 0.45
+DARKEN = 0.28  # Surroundings at full power.
+
+# Static furniture (a chair) that the segmenter calls "person".
+BACKGROUND_THRESHOLD = 30  # Max channel difference, 0-255, on blurred quarter-size frames.
+STALE_BACKGROUND = 0.25  # Changed fraction outside the person above which the background is not trusted.
+MIN_FRAGMENT = 0.03  # Pieces smaller than this fraction of the person are dropped.
 
 # Face Landmarker.
 NOSE, CHIN, FOREHEAD_TOP = 1, 152, 10
 FACE_LEFT, FACE_RIGHT = 234, 454
 
-# BGR: from the orange edge to the almost-white core.
-AURA_STOPS = ((0.0, (0, 0, 0)), (0.35, (0, 140, 255)), (0.7, (0, 215, 255)), (1.0, (200, 255, 255)))
+# Cel shading: (start of the tone in the flame field, BGR color, opacity).
+AURA_TONES = ((0.20, (40, 185, 255), 0.55), (0.42, (90, 235, 255), 0.75), (0.68, (150, 250, 255), 0.92))
+RIM_COLOR = (120, 235, 255)
 
 
-def _gradient_lut(stops) -> np.ndarray:
-    positions = np.array([position for position, _ in stops])
-    colors = np.array([color for _, color in stops], dtype=np.float32)
-    x = np.linspace(0.0, 1.0, 256)
-    return np.stack([np.interp(x, positions, colors[:, channel]) for channel in range(3)], axis=1)
+def _tone_luts(tones, edge: float = 0.025) -> tuple[np.ndarray, np.ndarray]:
+    """Flat tones with short anti-aliased steps, indexed by the field (0-255)."""
+    x = np.linspace(0.0, 1.0, 256, dtype=np.float32)
+    # Start from the first tone: the anti-aliased edge must not fade through black.
+    colors = np.tile(np.array(tones[0][1], np.float32), (256, 1))
+    alpha = np.zeros(256, np.float32)
+    for start, color, opacity in tones:
+        step = np.clip((x - start) / edge, 0.0, 1.0)[:, None]
+        colors = colors * (1.0 - step) + np.array(color, np.float32) * step
+        alpha = np.maximum(alpha, step[:, 0] * opacity)
+    return colors.astype(np.uint8), alpha
 
 
-AURA_LUT = _gradient_lut(AURA_STOPS).astype(np.float32)
+TONE_COLORS, TONE_ALPHA = _tone_luts(AURA_TONES)
+# Index 255 is reserved for the inside of the silhouette: rim color, no aura.
+COLOR_LUT = TONE_COLORS.copy()
+COLOR_LUT[255] = RIM_COLOR
+COLOR_LUT = COLOR_LUT.reshape(1, 256, 3)
+ALPHA_LUT = TONE_ALPHA.copy()
+ALPHA_LUT[255] = 0.0
 
 
 # ---------- gesture ----------
@@ -102,81 +126,229 @@ def charging_from_landmarks(hands, faces, width: int, height: int) -> bool:
     return charge_pose(points, face, width, height)
 
 
+# ---------- silhouette ----------
+
+def head_ellipse(faces, width: int, height: int):
+    """Head and hair around the first face as ((cx, cy), (rx, ry), angle) in pixels, or None."""
+    if not faces:
+        return None
+    face = _points(faces[0], width, height)
+    if face.shape[0] <= max(FACE_RIGHT, CHIN) or not np.isfinite(face).all():
+        return None
+    top, chin = face[FOREHEAD_TOP], face[CHIN]
+    face_height = float(np.linalg.norm(chin - top))
+    face_width = float(np.linalg.norm(face[FACE_RIGHT] - face[FACE_LEFT]))
+    if face_height < 10.0 or face_width < 10.0:
+        return None
+    up = (top - chin) / face_height
+    # Shifted up and enlarged: the hair sits above the forehead landmark.
+    center = (top + chin) * 0.5 + up * 0.15 * face_height
+    angle = math.degrees(math.atan2(float(up[0]), float(-up[1])))
+    return ((int(round(center[0])), int(round(center[1]))),
+            (int(round(0.8 * face_width)), int(round(0.85 * face_height))), angle)
+
+
+def refine_person_mask(mask: np.ndarray, frame: np.ndarray, background: np.ndarray | None, head) -> np.ndarray:
+    """Drop static furniture the segmenter calls "person" (a chair) using the calibrated background.
+
+    Only segmenter pixels that differ from the background are kept, plus the head ellipse (dark
+    hair in front of a dark chair barely differs from it). Holes are filled and small leftovers
+    dropped. The mask comes back unchanged when there is no face or the background is stale.
+    """
+    if background is None or head is None or background.shape != frame.shape:
+        return mask
+    height, width = mask.shape
+    size = (max(8, width // 4), max(8, height // 4))
+    small = cv2.GaussianBlur(cv2.resize(frame, size, interpolation=cv2.INTER_AREA), (5, 5), 0)
+    plate = cv2.GaussianBlur(cv2.resize(background, size, interpolation=cv2.INTER_AREA), (5, 5), 0)
+    changed = cv2.absdiff(small, plate).max(axis=2) > BACKGROUND_THRESHOLD
+    person = cv2.resize(mask, size, interpolation=cv2.INTER_AREA) > 0.5
+    if not person.any():
+        return mask
+    outside = ~person
+    if outside.any() and float(changed[outside].mean()) > STALE_BACKGROUND:
+        return mask
+    keep = (person & changed).astype(np.uint8)
+    (cx, cy), (rx, ry), angle = head
+    fx, fy = size[0] / width, size[1] / height
+    cv2.ellipse(keep, (int(cx * fx), int(cy * fy)), (max(1, int(rx * fx)), max(1, int(ry * fy))),
+                angle, 0, 360, 1, -1)
+    keep &= person.astype(np.uint8)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    keep = cv2.morphologyEx(keep, cv2.MORPH_OPEN, kernel)
+    keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, kernel, iterations=2)
+    contours, _ = cv2.findContours(keep, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    minimum = MIN_FRAGMENT * float(person.sum())
+    filled = np.zeros_like(keep)
+    for contour in contours:
+        if cv2.contourArea(contour) >= minimum:
+            cv2.drawContours(filled, [contour], -1, 1, -1)
+    filled &= person.astype(np.uint8)
+    soft = cv2.GaussianBlur(filled.astype(np.float32), (0, 0), 1.0)
+    return np.minimum(mask, cv2.resize(soft, (width, height), interpolation=cv2.INTER_LINEAR))
+
+
 # ---------- aura ----------
 
-class AuraRenderer:
-    """Yellow aura with upward flames, pulse and sparks, at half resolution."""
+@dataclass
+class AuraGeometry:
+    """Everything that only depends on the person mask, recomputed when a new mask arrives."""
+    area: tuple
+    inside_full: np.ndarray  # Person pixels inside the crop at full resolution: never darkened.
+    person: np.ndarray  # Refined mask inside the crop, at AURA_SCALE.
+    inside: np.ndarray  # Boolean version of `person`.
+    inside_index: np.ndarray  # 255 inside the person, 0 outside: selects the rim entry of the LUTs.
+    aura_weight: np.ndarray  # Where the aura may paint: outside the person, softened at the edge.
+    outside_distance: np.ndarray
+    rim: np.ndarray  # Rim light opacity at full power.
+    fade: np.ndarray
+    edge: np.ndarray  # Contour points, for the sparks.
+    origin: tuple  # Crop corner at AURA_SCALE: noise is sampled in frame coordinates.
 
-    def __init__(self, seed: int = 77, sparks: int = 30):
+
+class AuraRenderer:
+    """Cel-shaded aura with rising flame tongues, rim light and darker surroundings.
+
+    The aura is painted outside the silhouette only; inside it there is just a thin band of light
+    along the edge. The geometry is cached per mask (10 Hz) and the flames move every frame.
+    """
+
+    def __init__(self, seed: int = 77, sparks: int = 36):
         rng = np.random.default_rng(seed)
-        coarse = rng.random((16, 64), dtype=np.float32)
-        fine = rng.random((64, 128), dtype=np.float32)
-        # Taller than wide: vertical tongues of fire.
-        noise = (cv2.resize(coarse, (256, 256), interpolation=cv2.INTER_CUBIC) * 0.65
-                 + cv2.resize(fine, (256, 256), interpolation=cv2.INTER_CUBIC) * 0.35)
-        self.noise = np.clip(noise, 0.0, 1.0)
+        self.noise = []
+        for rows, cols in ((16, 48), (24, 80)):
+            # Taller than wide: vertical tongues of fire.
+            coarse = cv2.resize(rng.random((rows, cols), dtype=np.float32), (256, 256), interpolation=cv2.INTER_CUBIC)
+            fine = cv2.resize(rng.random((64, 128), dtype=np.float32), (256, 256), interpolation=cv2.INTER_CUBIC)
+            self.noise.append(np.clip(coarse * 0.7 + fine * 0.3, 0.0, 1.0))
         self.sparks = sparks
-        self.seed = seed
-        kernel = np.zeros((26, 1), dtype=np.float32)
-        kernel[:, 0] = np.linspace(1.0, 0.2, 26)
-        self.upward = kernel / kernel.sum()
+        # Per spark and cycle: edge point, sideways drift, rise speed, size. Cycles repeat after 64.
+        self.spark_table = np.random.default_rng(seed + 1).random((sparks, 64, 4))
+        self.geometry_updates = 0
+        self._mask: np.ndarray | None = None
+        self._geometry: AuraGeometry | None = None
+
+    def geometry(self, frame: np.ndarray, mask: np.ndarray, background: np.ndarray | None = None,
+                 head=None) -> AuraGeometry | None:
+        if mask is not self._mask:
+            self._mask = mask
+            self._geometry = self._prepare(frame, mask, background, head)
+            self.geometry_updates += 1
+        return self._geometry
+
+    def _prepare(self, frame, mask, background, head) -> AuraGeometry | None:
+        refined = refine_person_mask(mask, frame, background, head).astype(np.float32)
+        x, y, w, h = cv2.boundingRect((refined > 0.3).astype(np.uint8))
+        if w <= 0 or h <= 0:
+            return None
+        height, width = refined.shape
+        reach = AURA_RADIUS * MAX_RADIUS_SCALE
+        side = int(math.ceil((2.3 * reach + 2) / AURA_SCALE))
+        rise = int(math.ceil(FLAME_RISE * reach / AURA_SCALE))
+        left, top = max(0, x - side), max(0, y - side - rise)
+        right, bottom = min(width, x + w + side), min(height, y + h + side)
+        small_size = (max(2, int((right - left) * AURA_SCALE)), max(2, int((bottom - top) * AURA_SCALE)))
+        person = cv2.resize(refined[top:bottom, left:right], small_size, interpolation=cv2.INTER_AREA)
+        inside = person > 0.5
+        binary = inside.astype(np.uint8)
+        outside_distance = cv2.distanceTransform(1 - binary, cv2.DIST_L2, 3)
+        inside_distance = cv2.distanceTransform(binary, cv2.DIST_L2, 3)
+        rim = np.clip(1.0 - inside_distance / RIM_WIDTH, 0.0, 1.0) ** 2 * inside
+        # The light comes from the aura around: stronger at the top of the body.
+        rim *= np.linspace(1.0, 0.4, rim.shape[0], dtype=np.float32)[:, None]
+        # Fade out before the crop border, except where the crop is the frame border.
+        fade = np.ones_like(person)
+        ramp = 8
+        rows, cols = fade.shape
+        steps = np.linspace(0.0, 1.0, ramp, dtype=np.float32)
+        if left > 0:
+            fade[:, :ramp] *= steps[None, :min(ramp, cols)]
+        if right < width:
+            fade[:, -ramp:] *= steps[::-1][None, -min(ramp, cols):]
+        if top > 0:
+            fade[:ramp] *= steps[:min(ramp, rows), None]
+        # The body continues below the frame: soften the bottom instead of a flat bar of fire.
+        fade[-min(ramp * 2, rows):] *= np.linspace(1.0, 0.0, min(ramp * 2, rows), dtype=np.float32)[:, None]
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        edge = (np.concatenate([contour.reshape(-1, 2) for contour in contours])
+                if contours else np.zeros((0, 2), np.int32))
+        return AuraGeometry(
+            area=np.s_[top:bottom, left:right], inside_full=refined[top:bottom, left:right] > 0.5,
+            person=person, inside=inside, inside_index=binary * np.uint8(255),
+            aura_weight=((1.0 - person) * ~inside).astype(np.float32),
+            outside_distance=outside_distance, rim=(rim * RIM_ALPHA).astype(np.float32), fade=fade,
+            edge=edge, origin=(int(left * AURA_SCALE), int(top * AURA_SCALE)),
+        )
+
+    def _noise(self, geometry: AuraGeometry, t: float) -> np.ndarray:
+        rows, cols = geometry.person.shape
+        left, top = geometry.origin
+        layers = []
+        for texture, speed in zip(self.noise, (140.0, 230.0)):
+            size = texture.shape[0]
+            offset = int(t * speed)  # The texture scrolls up: the flames rise.
+            row_index = (top + np.arange(rows) + offset) % size
+            col_index = (left + np.arange(cols)) % size
+            layers.append(texture[np.ix_(row_index, col_index)])
+        return layers[0] * 0.6 + layers[1] * 0.4
 
     def render(self, frame: np.ndarray, mask: np.ndarray | None, intensity: float, t: float,
-               radius_scale: float = 1.0) -> np.ndarray:
+               radius_scale: float = 1.0, background: np.ndarray | None = None, head=None) -> np.ndarray:
         if mask is None or intensity <= 0.0:
             return frame
-        x, y, w, h = cv2.boundingRect((mask > 0.3).astype(np.uint8))
-        if w <= 0 or h <= 0:
+        geometry = self.geometry(frame, mask, background, head)
+        if geometry is None:
             return frame
-        height, width = mask.shape
-        left, top = max(0, x - 70), max(0, y - 170)
-        right, bottom = min(width, x + w + 70), min(height, y + h + 15)
-        area = np.s_[top:bottom, left:right]
-        small_size = (max(2, int((right - left) * AURA_SCALE)), max(2, int((bottom - top) * AURA_SCALE)))
-        person = cv2.resize(mask[area], small_size, interpolation=cv2.INTER_LINEAR)
+        power = min(1.0, intensity)
 
-        outside = (person < 0.5).astype(np.uint8)
-        distance = cv2.distanceTransform(outside, cv2.DIST_L2, 3)
-        pulse = 1.0 + 0.15 * math.sin(2 * math.pi * 3.0 * t)
-        ring = np.exp(-distance / (AURA_RADIUS * radius_scale * pulse)).astype(np.float32)
-        # The flames rise: each row takes light from the rows below.
-        rising = cv2.filter2D(ring, -1, self.upward, anchor=(0, 0), borderType=cv2.BORDER_REPLICATE)
-        ring = np.maximum(ring, rising * 1.3)
+        # Darker surroundings: what gives the aura its contrast, even on a light wall.
+        result = cv2.convertScaleAbs(frame, alpha=1.0 - DARKEN * power)
+        area = geometry.area
+        np.copyto(result[area], frame[area], where=geometry.inside_full[:, :, None])
 
-        offset = int(t * 220 * AURA_SCALE) % self.noise.shape[0]
-        noise = cv2.resize(np.roll(self.noise, offset, axis=0), small_size, interpolation=cv2.INTER_LINEAR)
-        field = np.clip(ring * (0.55 + 0.9 * noise) * intensity, 0.0, 1.0)
-        if bottom >= height:
-            rows = min(field.shape[0], 15)
-            field[-rows:] *= np.linspace(1.0, 0.0, rows, dtype=np.float32)[:, None]
+        radius = AURA_RADIUS * radius_scale * (1.0 + 0.12 * math.sin(2 * math.pi * 3.0 * t))
+        ring = cv2.exp(geometry.outside_distance * np.float32(-1.0 / radius))
+        # The flames rise: each row takes light from the rows below (two boxes ~ a decaying kernel).
+        rows = max(2, int(FLAME_RISE * radius))
+        rising = (cv2.blur(ring, (1, rows), anchor=(0, 0), borderType=cv2.BORDER_REPLICATE)
+                  + cv2.blur(ring, (1, max(2, rows // 2)), anchor=(0, 0), borderType=cv2.BORDER_REPLICATE)) * 0.5
+        ring = np.maximum(ring, rising * 1.6)
+        field = ring * (self._noise(geometry, t) + 0.3) * (geometry.fade * np.float32(255.0 * intensity))
+        index = np.clip(field, 0, 254).astype(np.uint8)
+        # Inside the silhouette there is only the rim light (LUT entry 255).
+        index = cv2.max(index, geometry.inside_index)
+        color = cv2.LUT(cv2.merge((index, index, index)), COLOR_LUT)
+        alpha = ALPHA_LUT[index] * geometry.aura_weight + geometry.rim * np.float32(power)
+        self._draw_sparks(color, alpha, geometry, t, power)
 
-        glow = AURA_LUT[(field * 255).astype(np.uint8)] * field[:, :, None]
-        self._draw_sparks(glow, person, t, intensity)
-        # Keep the person untouched: the aura lives outside the silhouette.
-        glow *= (1.0 - person)[:, :, None]
-        glow = cv2.resize(glow, (right - left, bottom - top), interpolation=cv2.INTER_LINEAR)
-
-        result = frame.copy()
-        result[area] = np.clip(frame[area].astype(np.float32) + glow, 0, 255).astype(np.uint8)
+        roi = result[area]
+        size = (roi.shape[1], roi.shape[0])
+        color = cv2.resize(color, size, interpolation=cv2.INTER_LINEAR)
+        alpha = cv2.resize(alpha, size, interpolation=cv2.INTER_LINEAR)
+        result[area] = cv2.blendLinear(roi, color, 1.0 - alpha, alpha)
         return result
 
-    def _draw_sparks(self, glow: np.ndarray, person: np.ndarray, t: float, intensity: float) -> None:
-        contours, _ = cv2.findContours((person > 0.5).astype(np.uint8), cv2.RETR_EXTERNAL,
-                                       cv2.CHAIN_APPROX_NONE)
-        if not contours:
+    def _draw_sparks(self, color: np.ndarray, alpha: np.ndarray, geometry: AuraGeometry, t: float,
+                     power: float) -> None:
+        edge = geometry.edge
+        if not len(edge):
             return
-        edge = np.concatenate([contour.reshape(-1, 2) for contour in contours])
-        life = 0.4
-        for index in range(self.sparks):
-            shifted = t + index * life / self.sparks
-            cycle = int(shifted // life)
-            age = (shifted % life) / life
-            rng = np.random.default_rng(self.seed * 1000 + index * 7919 + cycle)
-            x, y = edge[int(rng.integers(len(edge)))]
-            rise = rng.uniform(150, 300) * AURA_SCALE * age * life
-            brightness = (1.0 - age) * intensity
-            cv2.circle(glow, (int(x), int(y - rise)), int(rng.integers(1, 3)),
-                       (200 * brightness, 255 * brightness, 255 * brightness), -1, cv2.LINE_AA)
+        life = 0.45
+        shifted = t + np.arange(self.sparks) * life / self.sparks
+        cycle = (shifted // life).astype(int) % self.spark_table.shape[1]
+        ages = (shifted % life) / life
+        pick, drift, speed, size = self.spark_table[np.arange(self.sparks), cycle].T
+        points = edge[(pick * len(edge)).astype(int)]
+        xs = (points[:, 0] + drift * 12.0 - 6.0).astype(int)
+        ys = (points[:, 1] - (120.0 + 140.0 * speed) * AURA_SCALE * ages * life).astype(int)
+        rows, cols = alpha.shape
+        spark_color = AURA_TONES[-1][1]
+        for x, y, small, age in zip(xs, ys, size, ages):
+            if not (0 <= x < cols and 0 <= y < rows) or geometry.inside[y, x]:
+                continue
+            center, radius = (int(x), int(y)), 1 if small < 0.5 else 2
+            cv2.circle(color, center, radius, spark_color, -1, cv2.LINE_AA)
+            cv2.circle(alpha, center, radius, float((1.0 - age) * power), -1, cv2.LINE_AA)
 
 
 # ---------- transformation state ----------
@@ -247,10 +419,11 @@ def shake_frame(frame: np.ndarray, amplitude: float, t: float) -> np.ndarray:
 
 
 def render_super_saiyan(frame: np.ndarray, mask: np.ndarray | None,
-                        levels: PowerLevels, t: float, aura: AuraRenderer | None) -> np.ndarray:
+                        levels: PowerLevels, t: float, aura: AuraRenderer | None,
+                        background: np.ndarray | None = None, head=None) -> np.ndarray:
     output = frame
     if aura is not None:
-        output = aura.render(output, mask, levels.aura, t, levels.radius)
+        output = aura.render(output, mask, levels.aura, t, levels.radius, background, head)
     if levels.flash > 0.0:
         output = np.clip(output.astype(np.float32) + (255.0 - output) * min(1.0, levels.flash),
                          0, 255).astype(np.uint8)

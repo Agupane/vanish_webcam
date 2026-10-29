@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import cv2
 import numpy as np
 
 import dragonball_effect
@@ -135,15 +136,63 @@ class AuraTests(unittest.TestCase):
         np.testing.assert_array_equal(output[200, 160], self.frame[200, 160])
         np.testing.assert_array_equal(output[220, 150], self.frame[220, 150])
 
+    def test_rim_light_only_along_the_inside_edge(self):
+        output = self.aura.render(self.frame, self.mask, 1.0, 1.0).astype(int)
+        edge = output[90, 133]  # Just inside the left edge, near the top.
+        self.assertGreater(edge[2], 60 + 15)  # Warmer: more red than blue.
+        self.assertGreater(edge[2], edge[0])
+        np.testing.assert_array_equal(output[150, 160], self.frame[150, 160])  # Deeper inside: untouched.
+
     def test_glows_yellow_next_to_the_silhouette_and_rises(self):
         output = self.aura.render(self.frame, self.mask, 1.0, 1.0).astype(int)
-        beside = output[150, 120]
+        beside = output[150, 124]
         self.assertGreater(beside[2], 60 + 30)  # Red and green up: yellow.
         self.assertGreater(beside[1], 60 + 30)
+        self.assertGreater(beside[2], beside[0] + 30)
         above = output[60, 160]
         self.assertGreater(int(above[1]), 60)  # The flames go above the head.
-        np.testing.assert_array_equal(output[5, 5], self.frame[5, 5])
-        np.testing.assert_array_equal(output[230, 5], self.frame[230, 5])
+
+    def test_surroundings_darken_with_the_power(self):
+        far = (5, 5)
+        full = self.aura.render(self.frame, self.mask, 1.0, 1.0).astype(int)
+        half = ssj.AuraRenderer().render(self.frame, self.mask, 0.5, 1.0).astype(int)
+        self.assertLess(full[far].max(), 60 * (1 - ssj.DARKEN) + 2)
+        self.assertGreater(half[far].min(), full[far].max())
+        self.assertLess(half[far].max(), 60)
+        np.testing.assert_array_equal(full[far][0], full[far][2])  # Darker, not tinted.
+
+    def test_light_wall_still_shows_a_yellow_aura(self):
+        frame = np.full((240, 320, 3), 215, np.uint8)
+        output = ssj.AuraRenderer().render(frame, self.mask, 1.0, 1.0).astype(int)
+        beside = output[150, 124]
+        self.assertGreater(beside[2] - beside[0], 60)  # Clearly yellow, not washed out to white.
+
+    def test_not_cut_by_its_crop(self):
+        frame = np.full((540, 960, 3), 60, np.uint8)
+        mask = np.zeros((540, 960), np.float32)
+        mask[450:540, 430:530] = 1.0  # Low enough that the crop does not reach the top of the frame.
+        aura = ssj.AuraRenderer()
+        output = aura.render(frame, mask, 1.0, 0.0, radius_scale=2.5).astype(int)
+        geometry = aura.geometry(frame, mask)
+        rows, cols = geometry.area
+        darkened = int(round(60 * (1 - ssj.DARKEN)))
+        # Just outside the crop only the darkening is left; just inside the border the aura has faded to almost nothing.
+        for column in (cols.start - 1, cols.stop):
+            np.testing.assert_array_equal(output[rows.start:rows.stop, column], darkened)
+        for column in (cols.start, cols.stop - 1):
+            self.assertLessEqual(np.abs(output[rows.start:rows.stop, column] - darkened).max(), 2)
+        self.assertLessEqual(np.abs(output[rows.start, cols.start:cols.stop] - darkened).max(), 2)
+
+    def test_geometry_is_cached_per_mask(self):
+        aura = ssj.AuraRenderer()
+        for index in range(5):
+            aura.render(self.frame, self.mask, 1.0, index / 30)
+        self.assertEqual(aura.geometry_updates, 1)
+        aura.render(self.frame, self.mask.copy(), 1.0, 0.2)
+        self.assertEqual(aura.geometry_updates, 2)
+        first = aura.render(self.frame, self.mask, 1.0, 0.1)
+        second = aura.render(self.frame, self.mask, 1.0, 0.4)
+        self.assertTrue(np.any(first != second))  # The flames move between frames with the same mask.
 
     def test_deterministic_for_the_same_time(self):
         first = self.aura.render(self.frame, self.mask, 1.0, 2.5)
@@ -153,19 +202,87 @@ class AuraTests(unittest.TestCase):
         self.assertEqual(first.shape, self.frame.shape)
 
     def test_fast_enough_for_live_video(self):
-        frame = np.full((540, 960, 3), 60, np.uint8)
+        background = np.full((540, 960, 3), 200, np.uint8)
+        frame = background.copy()
+        frame[150:540, 380:580] = (200, 150, 60)
         mask = np.zeros((540, 960), np.float32)
         mask[150:540, 380:580] = 1.0
+        head = ((480, 230), (70, 90), 0.0)
         aura = ssj.AuraRenderer()
         levels = ssj.PowerLevels(aura=1.0)
-        ssj.render_super_saiyan(frame, mask, levels, 0.0, aura)
+        ssj.render_super_saiyan(frame, mask, levels, 0.0, aura, background, head)
         samples = []
+        current = mask
         for _ in range(3):
             started = time.perf_counter()
-            for index in range(10):
-                ssj.render_super_saiyan(frame, mask, levels, index / 30, aura)
-            samples.append((time.perf_counter() - started) / 10)
-        self.assertLess(min(samples), 0.04)
+            for index in range(15):
+                # A new mask every third frame, like the 10 Hz mask under a 30 FPS output.
+                if index % 3 == 0:
+                    current = mask.copy()
+                ssj.render_super_saiyan(frame, current, levels, index / 30, aura, background, head)
+            samples.append((time.perf_counter() - started) / 15)
+        # 4.9 ms on claude-bcn (main took 5.9 ms there without the background step); CI runners are slower.
+        self.assertLess(min(samples), 0.02)
+
+
+def chair_scene():
+    """Light wall, a dark chair back behind a person with dark hair; the segmenter takes the chair too."""
+    height, width = 270, 480
+    background = np.full((height, width, 3), 210, np.uint8)
+    chair = np.zeros((height, width), np.uint8)
+    cv2.ellipse(chair, (240, 160), (90, 120), 0, 0, 360, 1, -1)
+    background[chair > 0] = 35
+    person = np.zeros((height, width), np.uint8)
+    cv2.ellipse(person, (240, 120), (38, 48), 0, 0, 360, 1, -1)  # Head with dark hair.
+    cv2.rectangle(person, (130, 190), (350, 270), 1, -1)  # Shoulders and torso.
+    cv2.rectangle(person, (225, 160), (255, 195), 1, -1)  # Neck.
+    frame = background.copy()
+    frame[person > 0] = (200, 160, 70)  # Blue shirt.
+    cv2.ellipse(frame, (240, 128), (30, 38), 0, 0, 360, (120, 150, 200), -1)  # Face.
+    cv2.ellipse(frame, (240, 95), (36, 22), 0, 180, 360, (30, 30, 32), -1)  # Hair, as dark as the chair.
+    segmenter = np.maximum(person, chair).astype(np.float32)
+    head = ((240, 112), (36, 50), 0.0)
+    return frame, background, segmenter, person, head
+
+
+class SilhouetteTests(unittest.TestCase):
+    def test_chair_is_removed_but_the_dark_hair_stays(self):
+        frame, background, segmenter, person, head = chair_scene()
+        refined = ssj.refine_person_mask(segmenter, frame, background, head)
+        self.assertLess(refined[100, 180], 0.1)  # Chair beside the head.
+        self.assertLess(refined[150, 320], 0.1)  # Chair beside the neck.
+        self.assertGreater(refined[80, 240], 0.9)  # Dark hair in front of the dark chair.
+        self.assertGreater(refined[230, 200], 0.9)  # Shirt.
+        self.assertGreater(refined[130, 240], 0.9)  # Face.
+
+    def test_unchanged_without_a_face_or_with_a_stale_background(self):
+        frame, background, segmenter, _, head = chair_scene()
+        self.assertIs(ssj.refine_person_mask(segmenter, frame, background, None), segmenter)
+        self.assertIs(ssj.refine_person_mask(segmenter, frame, None, head), segmenter)
+        moved = np.roll(background, 60, axis=1) // 2  # Camera moved and the light changed.
+        self.assertIs(ssj.refine_person_mask(segmenter, frame, moved, head), segmenter)
+
+    def test_shirt_like_the_wall_does_not_leave_holes(self):
+        frame, background, segmenter, _, head = chair_scene()
+        frame[215:240, 260:300] = background[215:240, 260:300]  # A patch of shirt with the wall's color.
+        refined = ssj.refine_person_mask(segmenter, frame, background, head)
+        self.assertGreater(refined[228, 280], 0.9)
+
+    def test_head_ellipse_covers_the_hair_above_the_face(self):
+        width, height = 640, 480
+        center, axes, angle = ssj.head_ellipse([normalized(face(), width, height)], width, height)
+        self.assertEqual(center[0], 320)
+        self.assertLess(center[1], (90 + 230) / 2)  # Shifted up towards the hair.
+        self.assertLess(center[1] - axes[1], 90 - 30)  # Reaches above the forehead landmark.
+        self.assertAlmostEqual(angle, 0.0, places=3)
+        self.assertIsNone(ssj.head_ellipse([], width, height))
+
+    def test_aura_uses_the_refined_silhouette(self):
+        frame, background, segmenter, _, head = chair_scene()
+        with_plate = ssj.AuraRenderer().render(frame, segmenter, 1.0, 0.5, background=background, head=head)
+        without = ssj.AuraRenderer().render(frame, segmenter, 1.0, 0.5)
+        # Over the chair, beside the head: lit by the aura only once the chair is out of the silhouette.
+        self.assertGreater(int(with_plate[100, 192, 2]) - int(without[100, 192, 2]), 30)
 
 
 class PowerStateTests(unittest.TestCase):
