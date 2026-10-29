@@ -1,12 +1,14 @@
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import mediapipe as mp
 
-from local_app.vanish_cam import (
-    AppState, MultiViewGestureRecognizer, recognize_gesture, start_vanish_on_gesture,
-    victory_landmark_score,
+from vanish_cam import (
+    AppState, MultiViewGestureRecognizer, camera_source, find_linux_cameras,
+    recognize_gesture, start_vanish_on_gesture, victory_landmark_score,
 )
 
 
@@ -184,9 +186,9 @@ class MultiViewTests(unittest.TestCase):
             SimpleNamespace(recognize_for_video=lambda image, timestamp: self.empty), alternate
         )
         self.assertEqual(recognize_gesture(detector, self.image, 1000)[0], "No_Hand")
-        self.assertEqual(len(calls), 10)
-        recognize_gesture(detector, self.image, 1140)
-        self.assertEqual(len(calls), 10)
+        self.assertEqual(len(calls), 3)  # Retries are spread over successive frames.
+        recognize_gesture(detector, self.image, 1100)
+        self.assertEqual(len(calls), 3)
         alternate.recognize = lambda image: self.victory
         self.assertEqual(recognize_gesture(detector, self.image, 1420)[0], "Victory")
         alternate.recognize = lambda image: self.empty
@@ -212,12 +214,36 @@ class MultiViewTests(unittest.TestCase):
             SimpleNamespace(recognize_for_video=lambda image, timestamp: self.empty),
             SimpleNamespace(recognize=recognize),
         )
-        self.assertEqual(recognize_gesture(detector, self.image, 1000)[0], "Victory")
+        # The lower crop is reached in the second retry batch.
+        self.assertEqual(recognize_gesture(detector, self.image, 1000)[0], "No_Hand")
+        self.assertEqual(recognize_gesture(detector, self.image, 1140)[0], "Victory")
         self.assertEqual(detector.preferred_crop, "lower_left")
         self.assertEqual(detector.preferred_rotation, 0)
         calls.clear()
-        self.assertEqual(recognize_gesture(detector, self.image, 1140)[0], "Victory")
+        self.assertEqual(recognize_gesture(detector, self.image, 1280)[0], "Victory")
         self.assertEqual(calls, [(37, 24)])
+
+
+
+class LinuxCameraTests(unittest.TestCase):
+    def test_skips_metadata_nodes_and_v4l2loopback_outputs(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            sysfs = root / "class"
+            sysfs.mkdir()
+            for name, parent, index in (
+                ("video0", "pci/usb1", "0"), ("video1", "pci/usb1", "1"),
+                ("video2", "pci/usb2", "0"), ("video10", "virtual/video4linux", "0"),
+            ):
+                device = root / "devices" / parent / name
+                device.mkdir(parents=True)
+                (device / "index").write_text(index + "\n")
+                (sysfs / name).symlink_to(device)
+            self.assertEqual(find_linux_cameras(sysfs), ["/dev/video0", "/dev/video2"])
+
+    def test_camera_accepts_index_or_device_path(self):
+        self.assertEqual(camera_source("1"), 1)
+        self.assertEqual(camera_source("/dev/video2"), "/dev/video2")
 
 
 if __name__ == "__main__":

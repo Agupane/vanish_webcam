@@ -1,5 +1,7 @@
 # VanishCam — webcam disappearance effects
 
+> **Ubuntu / Linux:** see [README_UBUNTU.md](README_UBUNTU.md) (instalación y uso con Zoom y Google Meet).
+
 Video is processed on your computer. It is neither recorded nor sent to a server. The preview window and virtual camera show only the video and effects, without overlaid menus, instructions, or text.
 
 For step-by-step instructions in English and Italian, see the [user guide](USER_GUIDE_EN_IT.md).

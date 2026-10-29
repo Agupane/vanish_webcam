@@ -75,11 +75,38 @@ def positive_fps(value: str) -> float:
     return fps
 
 
+def camera_source(value: str) -> int | str:
+    """Indice della webcam (0, 1...) oppure percorso come /dev/video0 su Linux."""
+    return int(value) if value.isdigit() else value
+
+
+def find_linux_cameras(sysfs: Path = Path("/sys/class/video4linux")) -> list[str]:
+    """Webcam reali, escluse le uscite virtuali di v4l2loopback.
+
+    Le webcam USB espongono spesso due nodi (video + metadati): si tiene solo
+    quello con index 0. I dispositivi di v4l2loopback stanno in /sys/devices/virtual.
+    """
+    cameras = []
+    for node in sorted(sysfs.glob("video*"), key=lambda path: int(path.name[5:] or 0)):
+        try:
+            if "/virtual/" in str(node.resolve()):
+                continue
+            if (node / "index").read_text().strip() != "0":
+                continue
+        except (OSError, ValueError):
+            continue
+        cameras.append(f"/dev/{node.name}")
+    return cameras
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Scegli Normal Vanish o Naruto Vanish per la webcam."
     )
-    parser.add_argument("--camera", type=int, default=0, help="Indice della webcam")
+    parser.add_argument(
+        "--camera", type=camera_source, default=None,
+        help="Indice della webcam o percorso /dev/videoN (default: 0; su Linux la prima webcam reale)",
+    )
     parser.add_argument("--width", type=int, default=960, help="Larghezza video")
     parser.add_argument("--height", type=int, default=540, help="Altezza video")
     parser.add_argument(
@@ -167,13 +194,20 @@ def open_virtual_camera(args: argparse.Namespace, width: int, height: int):
             backend=args.virtual_backend, device=args.virtual_device,
         )
     except (ImportError, RuntimeError, OSError, ValueError) as error:
-        message = (
-            "Webcam virtuale non disponibile. Installa OBS Studio (con il driver "
-            "OBS Virtual Camera) oppure Unity Capture. Se usi OBS Virtual Camera, "
-            "ferma 'Avvia fotocamera virtuale' in OBS. "
-            "Avvia da AVVIA_LOCALE.bat per installare pyvirtualcam. "
-            f"Dettaglio: {error}"
-        )
+        if platform.system() == "Linux":
+            message = (
+                "Webcam virtuale non disponibile. Esegui ./install-ubuntu.sh oppure "
+                "carica v4l2loopback con 'sudo modprobe v4l2loopback exclusive_caps=1'. "
+                f"Dettaglio: {error}"
+            )
+        else:
+            message = (
+                "Webcam virtuale non disponibile. Installa OBS Studio (con il driver "
+                "OBS Virtual Camera) oppure Unity Capture. Se usi OBS Virtual Camera, "
+                "ferma 'Avvia fotocamera virtuale' in OBS. "
+                "Avvia da AVVIA_LOCALE.bat per installare pyvirtualcam. "
+                f"Dettaglio: {error}"
+            )
         if args.virtual_camera is True or args.virtual_backend or args.virtual_device:
             raise RuntimeError(message) from error
         print(f"[Webcam] {message}\n[Webcam] Proseguo con l'anteprima locale.")
@@ -222,18 +256,33 @@ def download_models(mode: str = "normal") -> None:
             ) from error
 
 
-def open_camera(index: int, width: int, height: int) -> cv2.VideoCapture:
-    if platform.system() == "Windows":
+def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCapture:
+    system = platform.system()
+    if index is None:
+        cameras = find_linux_cameras() if system == "Linux" else []
+        index = cameras[0] if cameras else 0
+        if cameras:
+            print(f"[Webcam] Uso la webcam {index}.")
+
+    if system == "Windows":
         capture = cv2.VideoCapture(index, cv2.CAP_DSHOW)
         if not capture.isOpened():
             capture.release()
             capture = cv2.VideoCapture(index)
+    elif system == "Linux":
+        capture = cv2.VideoCapture(index, cv2.CAP_V4L2)
+        if not capture.isOpened():
+            capture.release()
+            capture = cv2.VideoCapture(index)
+        # In YUYV molte webcam USB scendono a 5-10 FPS sopra il 640x480.
+        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
     else:
         capture = cv2.VideoCapture(index)
 
     if not capture.isOpened():
+        hint = "elenca le webcam con 'v4l2-ctl --list-devices'" if system == "Linux" else "prova --camera 1"
         raise RuntimeError(
-            f"Webcam {index} non disponibile. Chiudi le altre app oppure prova --camera 1."
+            f"Webcam {index} non disponibile. Chiudi le altre app oppure {hint}."
         )
 
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
