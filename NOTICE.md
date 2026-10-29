@@ -43,7 +43,6 @@ share of current lines last written upstream, per `git blame`:
 | `test_vanish_cam.py`, `test_naruto_effect.py`, `test_video_output.py` | ~72%, ~81%, ~43% | Upstream tests, extended here |
 | `README.md` | ~25% | Rewritten here; some lines survive from upstream's README |
 | `README_ORIGINAL.md` | ~94% | Upstream's README, kept for reference with a header note added here |
-| `run3.py` | ~94% | Upstream meme tracker; only its strings were translated here |
 | `requirements.txt`, `.gitignore`, `.gitattributes`, `AVVIA_LOCALE.bat`, `BUILD_WINDOWS.bat`, `VanishCam.spec`, `assets/README.md` | mostly upstream | Small edits here (pins, line endings, translation, delegation to `vanishcam.bat`) |
 
 ### Upstream files and assets not modified (not MIT)

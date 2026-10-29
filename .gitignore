@@ -3,8 +3,13 @@ __pycache__/
 .pytest_cache/
 .venv/
 .venv-local/
+.venv-build/
 models/
 *.part
-/build/
-/dist/*
-!/dist/VanishCam.exe
+build/
+dist/
+*.egg-info/
+.coverage
+*.log
+.DS_Store
+Thumbs.db

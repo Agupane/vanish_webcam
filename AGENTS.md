@@ -30,7 +30,6 @@ result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_web
 | `README_ORIGINAL.md` | Upstream README (English), kept for reference |
 | `LICENSE`, `NOTICE.md` | MIT for this fork's contributions; NOTICE lists upstream (unlicensed) files and third-party licenses |
 | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`, `.github/` | Contributor docs, templates and CI |
-| `run3.py` | Unrelated upstream meme tracker; missing its `memes/` assets. Ignore it |
 | `hand_landmarker.task`, `face_landmarker.task` | MediaPipe models shipped in the repo |
 | `models/` (gitignored) | Downloaded at runtime: selfie segmenter, gesture recognizer, multiclass segmenter (hair; optional), generated `teleport.wav` and `ssj_*.wav` |
 

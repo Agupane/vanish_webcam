@@ -65,7 +65,8 @@ All notable changes to this fork are documented here. The format is based on
 
 This fork starts from [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam) at commit `1e008cf`
 (upstream history `f0f4372`..`1e008cf`, 9 to 24 October 2026): the local webcam vanish app with Normal and Naruto
-modes, a Windows-oriented launcher set (`AVVIA_*.bat`), a PyInstaller build (`VanishCam.spec`, `BUILD_WINDOWS.bat`)
-and the `run3.py` meme tracker. Upstream code is not covered by this fork's license; see [NOTICE.md](NOTICE.md).
+modes, a Windows-oriented launcher set (`AVVIA_*.bat`) and a PyInstaller build (`VanishCam.spec`,
+`BUILD_WINDOWS.bat`). The unrelated `run3.py` meme tracker was dropped from this fork. Upstream code is not covered by
+this fork's license; see [NOTICE.md](NOTICE.md).
 
 [Unreleased]: https://github.com/Agupane/vanish_webcam/compare/1e008cf...main
