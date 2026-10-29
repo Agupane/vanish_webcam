@@ -1,4 +1,4 @@
-"""Super Saiyan transformation: charge-ki pose, spiked golden hair, yellow aura and sounds."""
+"""Super Saiyan transformation: charge-ki pose, yellow aura and sounds."""
 
 from __future__ import annotations
 
@@ -14,11 +14,8 @@ import numpy as np
 CHARGE_SECONDS = 1.5
 FLASH_SECONDS = 0.45
 POWER_DOWN_SECONDS = 0.6
-HAIR_INTERVAL = 0.1
-HAIR_HOLD_SECONDS = 0.3
 AURA_SCALE = 0.5
-AURA_RADIUS = 16.0  # At half resolution.
-HAIR_CLASS = 1  # selfie_multiclass_256x256: 0 background, 1 hair, 2 body skin, 3 face skin, 4 clothes, 5 other.
+AURA_RADIUS = 22.0  # At half resolution.
 
 # Face Landmarker.
 NOSE, CHIN, FOREHEAD_TOP = 1, 152, 10
@@ -26,7 +23,6 @@ FACE_LEFT, FACE_RIGHT = 234, 454
 
 # BGR: from the orange edge to the almost-white core.
 AURA_STOPS = ((0.0, (0, 0, 0)), (0.35, (0, 140, 255)), (0.7, (0, 215, 255)), (1.0, (200, 255, 255)))
-GOLD_STOPS = ((0.0, (10, 70, 140)), (0.55, (30, 190, 255)), (1.0, (170, 250, 255)))
 
 
 def _gradient_lut(stops) -> np.ndarray:
@@ -37,7 +33,6 @@ def _gradient_lut(stops) -> np.ndarray:
 
 
 AURA_LUT = _gradient_lut(AURA_STOPS).astype(np.float32)
-GOLD_LUT = _gradient_lut(GOLD_STOPS).astype(np.float32)
 
 
 # ---------- gesture ----------
@@ -107,249 +102,7 @@ def charging_from_landmarks(hands, faces, width: int, height: int) -> bool:
     return charge_pose(points, face, width, height)
 
 
-# ---------- golden hair ----------
-
-def head_box(face: np.ndarray, width: int, height: int) -> tuple[int, int, int, int] | None:
-    scale = float(np.linalg.norm(face[FACE_RIGHT] - face[FACE_LEFT]))
-    if scale < 20.0:
-        return None
-    left = int(max(0, min(face[FACE_LEFT][0], face[FACE_RIGHT][0]) - 0.6 * scale))
-    right = int(min(width, max(face[FACE_LEFT][0], face[FACE_RIGHT][0]) + 0.6 * scale))
-    top = int(max(0, face[FOREHEAD_TOP][1] - 1.2 * scale))
-    bottom = int(min(height, face[CHIN][1] + 0.2 * scale))
-    if right - left < 8 or bottom - top < 8:
-        return None
-    return left, top, right, bottom
-
-
-def hair_from_confidence(confidence: np.ndarray, box: tuple[int, int, int, int],
-                         shape: tuple[int, int]) -> np.ndarray:
-    left, top, right, bottom = box
-    mask = np.zeros(shape, dtype=np.float32)
-    resized = cv2.resize(confidence.astype(np.float32), (right - left, bottom - top),
-                         interpolation=cv2.INTER_LINEAR)
-    resized = cv2.GaussianBlur(resized, (0, 0), sigmaX=1.5, sigmaY=1.5)
-    mask[top:bottom, left:right] = np.clip((resized - 0.35) / 0.4, 0.0, 1.0)
-    return mask
-
-
-def recolor_hair(frame: np.ndarray, hair: np.ndarray | None, amount: float) -> np.ndarray:
-    """Golden hair that keeps texture and lighting (gradient map on luminance)."""
-    if hair is None or amount <= 0.0:
-        return frame
-    alpha_full = hair * float(min(1.0, amount))
-    points = cv2.findNonZero((alpha_full > 0.02).astype(np.uint8))
-    if points is None:
-        return frame
-    x, y, w, h = cv2.boundingRect(points)
-    margin = 20
-    left, top = max(0, x - margin), max(0, y - margin)
-    right, bottom = min(frame.shape[1], x + w + margin), min(frame.shape[0], y + h + margin)
-    area = np.s_[top:bottom, left:right]
-    crop = frame[area].astype(np.float32)
-    alpha = alpha_full[area]
-    gray = cv2.cvtColor(frame[area], cv2.COLOR_BGR2GRAY).astype(np.float32)
-    selected = gray[alpha > 0.5]
-    if selected.size < 20:
-        selected = gray[alpha > 0.02]
-    low, high = np.percentile(selected, (5, 95))
-    normalized = np.clip((gray - low) / max(1.0, high - low), 0.0, 1.0)
-    index = ((0.3 + 0.7 * normalized) * 255).astype(np.uint8)
-    gold = GOLD_LUT[index]
-    output = crop * (1.0 - alpha[:, :, None]) + gold * alpha[:, :, None]
-    glow = cv2.GaussianBlur(alpha, (0, 0), sigmaX=6.0, sigmaY=6.0)[:, :, None]
-    output += glow * np.array((0, 200, 255), dtype=np.float32) * 0.25
-    result = frame.copy()
-    result[area] = np.clip(output, 0, 255).astype(np.uint8)
-    return result
-
-
-def spike_hair(frame: np.ndarray, hair: np.ndarray | None, amount: float, t: float) -> np.ndarray:
-    """Stand the hair up: draw a gold spiky crest above the detected hair."""
-    if hair is None or amount <= 0.0:
-        return frame
-    mask = hair > 0.3
-    points = cv2.findNonZero(mask.astype(np.uint8))
-    if points is None:
-        return frame
-    x, y, w, h = cv2.boundingRect(points)
-    if w < 16 or h < 6:
-        return frame
-    height, width = frame.shape[:2]
-    # Topmost hair pixel for every column, so the spikes grow from the hairline.
-    first = np.argmax(mask, axis=0)
-    has_hair = mask.any(axis=0)
-    unit = float(max(w, 24))
-    count = 9
-    center = x + w * 0.5
-    rng = np.random.default_rng(1234)
-    bases = []
-    for index in range(count):
-        cx = x + int((index + 0.5) * w / count)
-        window = slice(max(0, cx - 3), min(width, cx + 4))
-        rows = first[window][has_hair[window]]
-        base_y = int(rows.min()) if rows.size else y + h // 4
-        bases.append((cx, base_y))
-
-    max_rise = unit * 1.05
-    pad_x = int(unit * 0.45) + 8
-    pad_y = int(max_rise) + 8
-    left, right = max(0, x - pad_x), min(width, x + w + pad_x)
-    top, bottom = max(0, y - pad_y), min(height, y + h + 8)
-    if right - left < 8 or bottom - top < 8:
-        return frame
-    output = frame.copy()
-    roi = output[top:bottom, left:right]
-    alpha = np.zeros(roi.shape[:2], dtype=np.float32)
-    for index, (cx, base_y) in enumerate(bases):
-        jitter = rng.uniform(-0.08, 0.08) * unit
-        outward = (cx - center) / max(w * 0.5, 1.0) * unit * 0.18
-        sway = math.sin(t * 2.6 + index * 1.7) * unit * 0.025
-        rise = unit * (0.55 + 0.5 * rng.random())
-        if index in (0, count - 1):
-            rise *= 0.8
-        half = unit * 0.075
-        base = (cx, base_y + 2)
-        tip = (cx + outward + jitter + sway, base_y - rise)
-        polygon = np.array((
-            (base[0] - half, base[1]),
-            (base[0] + half, base[1]),
-            (int(tip[0]), int(tip[1])),
-        ), dtype=np.int32)
-        polygon[:, 0] -= left
-        polygon[:, 1] -= top
-        cv2.fillPoly(alpha, [polygon], 1.0)
-    alpha = cv2.GaussianBlur(alpha, (0, 0), 0.9) * min(1.0, max(0.0, amount))
-    if not alpha.any():
-        return frame
-    rows = np.linspace(0.0, 1.0, roi.shape[0], dtype=np.float32)[:, None]
-    tone = ((0.55 + 0.45 * (1.0 - rows)) * 255).astype(np.uint8)
-    gold = GOLD_LUT[tone]
-    roi[:] = np.clip(roi * (1.0 - alpha[:, :, None]) + gold * alpha[:, :, None], 0, 255).astype(np.uint8)
-    outline = (alpha > 0.45).astype(np.uint8)
-    edge = cv2.dilate(outline, np.ones((3, 3), np.uint8)) & ~outline
-    if edge.any():
-        roi[edge > 0] = np.clip(roi[edge > 0] * 0.55 + np.array((10, 60, 120)) * 0.45,
-                                0, 255).astype(np.uint8)
-    return output
-
-
-class HairTracker:
-    """Segment the hair on a head crop (multiclass model, IMAGE mode)."""
-
-    def __init__(self, segmenter):
-        self.segmenter = segmenter
-        self.mask: np.ndarray | None = None
-        self.last_update = float("-inf")
-        self.last_face = float("-inf")
-
-    def update(self, frame: np.ndarray, face: np.ndarray | None, now: float) -> np.ndarray | None:
-        height, width = frame.shape[:2]
-        if self.mask is not None and self.mask.shape != (height, width):
-            self.mask = None
-        if face is None:
-            if now - self.last_face > HAIR_HOLD_SECONDS:
-                self.mask = None
-            return self.mask
-        self.last_face = now
-        if self.mask is not None and now - self.last_update < HAIR_INTERVAL:
-            return self.mask
-        self.last_update = now
-        box = head_box(face, width, height)
-        if box is None:
-            return self.mask
-        import mediapipe as mp
-
-        left, top, right, bottom = box
-        rgb = cv2.cvtColor(frame[top:bottom, left:right], cv2.COLOR_BGR2RGB)
-        result = self.segmenter.segment(
-            mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
-        )
-        masks = result.confidence_masks or []
-        if len(masks) <= HAIR_CLASS:
-            return self.mask
-        confidence = np.squeeze(masks[HAIR_CLASS].numpy_view())
-        fresh = hair_from_confidence(confidence, box, (height, width))
-        self.mask = fresh if self.mask is None else fresh * 0.6 + self.mask * 0.4
-        return self.mask
-
-    def close(self) -> None:
-        self.segmenter.close()
-
-
 # ---------- aura ----------
-
-AURA_SPRITE = Path(__file__).resolve().parent / "assets" / "saiyanaura.gif"
-
-
-class AuraSprite:
-    """Optional animated aura (GIF) blended over the frame with a screen mode."""
-
-    def __init__(self, path: Path = AURA_SPRITE):
-        from PIL import Image
-
-        image = Image.open(path)
-        self.duration = max(0.03, image.info.get("duration", 40) / 1000.0)
-        self.frames: list[np.ndarray] = []
-        try:
-            for index in range(getattr(image, "n_frames", 1)):
-                image.seek(index)
-                frame = np.asarray(image.convert("RGB"))[:, :, ::-1].copy()
-                height, width = frame.shape[:2]
-                # The source has a small watermark in the bottom-left corner.
-                frame[int(height * 0.93):, :int(width * 0.18)] = 0
-                self.frames.append(frame)
-        finally:
-            image.close()
-        # The aura area changes with the person, so cache each resized frame:
-        # resizing the 1280x720 GIF every frame is what made the effect laggy.
-        self.scaled: dict[tuple[int, int, int], np.ndarray] = {}
-
-    def _sprite(self, index: int, width: int, height: int) -> np.ndarray:
-        key = (width, height, index)
-        sprite = self.scaled.get(key)
-        if sprite is None:
-            sprite = cv2.resize(self.frames[index], (width, height),
-                                interpolation=cv2.INTER_LINEAR)
-            if len(self.scaled) >= 24:
-                self.scaled.clear()
-            self.scaled[key] = sprite
-        return sprite
-
-    def apply(self, frame: np.ndarray, intensity: float, t: float,
-              mask: np.ndarray | None = None) -> np.ndarray:
-        if intensity <= 0.0 or not self.frames:
-            return frame
-        index = int(t / self.duration) % len(self.frames)
-        height, width = frame.shape[:2]
-        output = frame.copy()
-        area = np.s_[0:height, 0:width]
-        if mask is not None:
-            points = cv2.findNonZero((mask > 0.3).astype(np.uint8))
-            if points is not None:
-                x, y, w, h = cv2.boundingRect(points)
-                aura_w = min(width, max(32, int(w * 1.8)))
-                aura_h = min(height, max(32, int(h * 2.0)))
-                left = min(max(0, x + w // 2 - aura_w // 2), width - aura_w)
-                top = min(max(0, y + h - aura_h), height - aura_h)
-                area = np.s_[top:top + aura_h, left:left + aura_w]
-        target = output[area]
-        sprite = self._sprite(index, target.shape[1], target.shape[0])
-        aura = sprite.astype(np.float32) * (min(1.0, max(0.0, intensity)) / 255.0)
-        base = target.astype(np.float32) * (1.0 / 255.0)
-        output[area] = np.clip((1.0 - (1.0 - base) * (1.0 - aura)) * 255.0, 0, 255).astype(np.uint8)
-        return output
-
-
-def load_aura_sprite(path: Path = AURA_SPRITE) -> AuraSprite | None:
-    if not path.is_file():
-        return None
-    try:
-        return AuraSprite(path)
-    except Exception as error:
-        print(f"[Super Saiyan] Could not load the aura image ({error}); using the generated aura.")
-        return None
-
 
 class AuraRenderer:
     """Yellow aura with upward flames, pulse and sparks, at half resolution."""
@@ -372,13 +125,12 @@ class AuraRenderer:
                radius_scale: float = 1.0) -> np.ndarray:
         if mask is None or intensity <= 0.0:
             return frame
-        points = cv2.findNonZero((mask > 0.3).astype(np.uint8))
-        if points is None:
+        x, y, w, h = cv2.boundingRect((mask > 0.3).astype(np.uint8))
+        if w <= 0 or h <= 0:
             return frame
         height, width = mask.shape
-        x, y, w, h = cv2.boundingRect(points)
-        left, top = max(0, x - 60), max(0, y - 140)
-        right, bottom = min(width, x + w + 60), min(height, y + h + 10)
+        left, top = max(0, x - 70), max(0, y - 170)
+        right, bottom = min(width, x + w + 70), min(height, y + h + 15)
         area = np.s_[top:bottom, left:right]
         small_size = (max(2, int((right - left) * AURA_SCALE)), max(2, int((bottom - top) * AURA_SCALE)))
         person = cv2.resize(mask[area], small_size, interpolation=cv2.INTER_LINEAR)
@@ -399,13 +151,13 @@ class AuraRenderer:
             field[-rows:] *= np.linspace(1.0, 0.0, rows, dtype=np.float32)[:, None]
 
         glow = AURA_LUT[(field * 255).astype(np.uint8)] * field[:, :, None]
-        glow *= (1.0 - 0.85 * person)[:, :, None]
         self._draw_sparks(glow, person, t, intensity)
+        # Keep the person untouched: the aura lives outside the silhouette.
+        glow *= (1.0 - person)[:, :, None]
         glow = cv2.resize(glow, (right - left, bottom - top), interpolation=cv2.INTER_LINEAR)
-        body = mask[area][:, :, None] * np.array((0, 215, 255), dtype=np.float32) * 0.08 * intensity
 
         result = frame.copy()
-        result[area] = np.clip(frame[area].astype(np.float32) + glow + body, 0, 255).astype(np.uint8)
+        result[area] = np.clip(frame[area].astype(np.float32) + glow, 0, 255).astype(np.uint8)
         return result
 
     def _draw_sparks(self, glow: np.ndarray, person: np.ndarray, t: float, intensity: float) -> None:
@@ -432,7 +184,6 @@ class AuraRenderer:
 @dataclass
 class PowerLevels:
     aura: float = 0.0
-    hair: float = 0.0
     flash: float = 0.0
     shake: float = 0.0
     radius: float = 1.0
@@ -471,19 +222,17 @@ class PowerState:
         age = max(0.0, now - self.started)
         if self.phase == "charging":
             charge = min(1.0, age / CHARGE_SECONDS)
-            flicker = 0.8 if charge > 0.5 and int(now * 12) % 2 else 0.0
-            return PowerLevels(aura=0.6 * charge, hair=flicker, shake=2.0 + 6.0 * charge)
+            return PowerLevels(aura=0.6 * charge, shake=2.0 + 6.0 * charge)
         if self.phase == "flash":
             progress = min(1.0, age / FLASH_SECONDS)
             flash = 0.9 * age / 0.08 if age < 0.08 else 0.9 * math.exp(-(age - 0.08) * 8.0)
-            return PowerLevels(aura=1.0, hair=1.0, flash=flash, shake=6.0 * (1.0 - progress),
+            return PowerLevels(aura=1.0, flash=flash, shake=6.0 * (1.0 - progress),
                                radius=2.5 - 1.5 * progress)
         if self.phase == "super":
-            return PowerLevels(aura=1.0, hair=1.0)
+            return PowerLevels(aura=1.0)
         if self.phase == "powering_down":
             left = max(0.0, 1.0 - age / POWER_DOWN_SECONDS)
-            hair = left if age < POWER_DOWN_SECONDS - 0.2 or int(now * 20) % 2 else 0.0
-            return PowerLevels(aura=left, hair=hair)
+            return PowerLevels(aura=left)
         return PowerLevels()
 
 
@@ -497,10 +246,9 @@ def shake_frame(frame: np.ndarray, amplitude: float, t: float) -> np.ndarray:
                           borderMode=cv2.BORDER_REPLICATE)
 
 
-def render_super_saiyan(frame: np.ndarray, mask: np.ndarray | None, hair: np.ndarray | None,
+def render_super_saiyan(frame: np.ndarray, mask: np.ndarray | None,
                         levels: PowerLevels, t: float, aura: AuraRenderer | None) -> np.ndarray:
-    output = recolor_hair(frame, hair, levels.hair)
-    output = spike_hair(output, hair, levels.hair, t)
+    output = frame
     if aura is not None:
         output = aura.render(output, mask, levels.aura, t, levels.radius)
     if levels.flash > 0.0:

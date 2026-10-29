@@ -19,8 +19,16 @@ the detected person dynamically.
 and is used by Dragon Ball mode. That repository has no license and the audio may be third-party material, so it is
 not covered by this fork's MIT license (see `NOTICE.md`). A user-provided file with the same name overrides it.
 
-## Super Saiyan aura
+## Super Saiyan sound
 
-`saiyanaura.gif` and `ssj_transform.mp3` were supplied by the owner. The GIF comes from a source that puts a
-StickNodes.com watermark in a corner, which the app blanks out before blending. Both are third-party material and are
-not covered by this fork's MIT license (see `NOTICE.md`). Replace them with your own files of the same names.
+`ssj_transform.mp3` was supplied by the owner and is the transformation sound. It is third-party material and is not
+covered by this fork's MIT license (see `NOTICE.md`). A user-provided file with the same name overrides it. The charge
+and aura hum are generated in `super_saiyan_effect.py`; the Super Saiyan aura itself is procedural and needs no image.
+
+There used to be a `saiyanaura.gif`; it was removed because the aura must surround the silhouette, and a rectangular
+GIF painted the person. `AuraRenderer` now draws the aura outside the person mask.
+
+## App icon
+
+`vanish_icon.png` is upstream's `vanish_icon.ico` converted to PNG for the Ubuntu Applications menu. It is not covered
+by the MIT license (see `NOTICE.md`); `vanish_icon.ico` is used by the Windows build.

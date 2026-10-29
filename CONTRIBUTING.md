@@ -29,7 +29,8 @@ On Linux you can also run `./install-ubuntu.sh`, which sets up the virtual camer
 MediaPipe needs `libegl1` and `libgles2` (`sudo apt install libegl1 libgles2`).
 
 Run the app with `.venv/bin/python vanish_cam.py` (`--help` lists the options). [AGENTS.md](AGENTS.md) explains the
-layout, the main loop and the state machines.
+layout, the main loop and the state machines; [ALGORITHMS.md](ALGORITHMS.md) maps the algorithms, their costs and the
+optimization backlog.
 
 ## Tests
 
@@ -50,8 +51,9 @@ These come from [AGENTS.md](AGENTS.md); pull requests that break them will be as
   The tests patch `cv2.putText` to fail.
 - **English only**: terminal messages, docs, code comments, docstrings and tests.
 - **No copyrighted anime assets.** Sounds are synthesized in code; users may drop their own files in `assets/`
-  (`teleport.*`, `ssj_*.MP3`). `assets/teleport.mp3` is the only audio asset committed here, taken from
-  `bernardocm10/vanish_webcam` at the owner's request and not covered by the MIT license (see NOTICE.md).
+  (`teleport.*`, `ssj_*.MP3`). The committed owner-supplied exceptions are `assets/teleport.mp3` (from
+  `bernardocm10/vanish_webcam`) and `assets/ssj_transform.mp3`; both are not covered by the MIT license (see NOTICE.md).
+  Do not add the golden-hair or GIF aura back without solving the "surround, don't paint, the person" rule.
 - **MediaPipe timestamps:** VIDEO-mode tasks need strictly increasing timestamps, so run each task at most once per frame.
 - **Keep the loop testable** through the patchable seams listed in AGENTS.md (`gesture_active`, `person_mask`,
   `open_camera`, `open_virtual_camera`, `VanishSound`, ...), and add tests for new behavior.
@@ -66,8 +68,9 @@ Style: follow the surrounding code. Python uses 4 spaces; shell and YAML use 2; 
 ## Pull requests
 
 1. Fork the repo and create a branch from `main`.
-2. Keep each pull request focused on one change; update `README.md`, `GUIDE.md`, `AGENTS.md` and
-   [CHANGELOG.md](CHANGELOG.md) (under *Unreleased*) when behavior changes.
+2. Keep each pull request focused on one change; update `README.md`, `GUIDE.md`, `AGENTS.md` (and
+   [ALGORITHMS.md](ALGORITHMS.md) for hot-path changes) and [CHANGELOG.md](CHANGELOG.md) (under *Unreleased*) when
+   behavior changes.
 3. Run the tests and fill in the pull request template: what changed, which tests you ran and on which platforms you
    checked it.
 4. CI must pass. A maintainer reviews and merges.

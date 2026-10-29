@@ -151,10 +151,9 @@ def _smoke_layer(frame: np.ndarray, anchor: tuple[int, int, int],
                 max(2, int(size * (0.09 + age * 0.12))))
         cv2.ellipse(layer, center, axes, direction * 15, 20, 230,
                     (244, 247, 245, 220), max(2, int(size * 0.025)), cv2.LINE_AA)
-    occupied = cv2.findNonZero(layer[:, :, 3])
-    if occupied is None:
+    x, y, width, height = cv2.boundingRect(layer[:, :, 3])
+    if width <= 0 or height <= 0:
         return
-    x, y, width, height = cv2.boundingRect(occupied)
     destination = frame[top + y:top + y + height, left + x:left + x + width]
     layer = layer[y:y + height, x:x + width]
     alpha = (layer[:, :, 3:4].astype(np.float32) / 255.0) * reveal * fade

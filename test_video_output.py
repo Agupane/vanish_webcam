@@ -25,7 +25,7 @@ EMPTY_ROOM, PERSON = 50, 170
 
 def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
              person=lambda t: False, keys=None, send_error=None, power=lambda t: False,
-             mask=None, aura_sprite=None, hair=None, **overrides):
+             mask=None, **overrides):
     """Run the real loop with a fake clock that advances one step per frame.
 
     Before 4 s the camera sees an empty room; afterwards someone is in frame.
@@ -71,9 +71,6 @@ def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
         mocks.enter_context(patch.object(app, "VanishSound", side_effect=new_sound))
         mocks.enter_context(patch.object(app, "teleport_sound_path", return_value="teleport.wav"))
         mocks.enter_context(patch.object(app, "ssj_sound_paths", return_value=("c.wav", "t.wav", "h.wav")))
-        mocks.enter_context(patch.object(app, "create_hair_tracker", return_value=None))
-        mocks.enter_context(patch.object(app, "hair_mask", return_value=hair))
-        mocks.enter_context(patch.object(app.ssj, "load_aura_sprite", return_value=aura_sprite))
         mocks.enter_context(patch.object(app, "draw_setup_marks", side_effect=lambda frame, mask: frame))
         mocks.enter_context(patch.object(
             app, "render_status_panel",

@@ -14,7 +14,7 @@ This is a fork of [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_
 created VanishCam with its Normal and Naruto modes; all credit for the original idea and app goes to them (original
 README in [README_ORIGINAL.md](README_ORIGINAL.md)). This fork adds and changes:
 
-- **Dragon Ball mode** as the default (Instant Transmission), with a **Super Saiyan** transformation (aura and spiked golden hair).
+- **Dragon Ball mode** as the default (Instant Transmission), with a **Super Saiyan** transformation: a procedural yellow aura that surrounds your silhouette.
 - **Held, reversible gestures:** hold the pose to vanish, repeat it to come back, with reappear effects.
 - **Better background capture** that waits until you are out of the frame.
 - **Unmirrored output** to the virtual camera (the preview stays mirrored).
@@ -65,6 +65,7 @@ To undo the Ubuntu integration (virtual camera, its DKMS module and the Applicat
 - **`modprobe: ERROR: could not insert 'v4l2loopback': Key was rejected by service`.** Secure Boot is on and the module's signing key (`/var/lib/shim-signed/mok/MOK.der`) is not enrolled. The installer registers it with `mokutil --import` and asks you for a one-time password. Reboot, choose *Enroll MOK* → *Continue* → *Yes* on the blue screen, type that password, and run the installer again. Check with `mokutil --test-key /var/lib/shim-signed/mok/MOK.der` (should say "is already enrolled") and `modinfo -F signer v4l2loopback` (should not be empty).
 - **`linux-headers-… is not available` or "kernel headers are missing".** Your running kernel is older than the ones in the archive. Run `sudo apt update && sudo apt full-upgrade`, reboot, and run the installer again.
 - **`NO_PUBKEY` / "repository is not signed" during `apt-get update`.** A third-party repository (yarn, etc.) has an expired or missing key. The installer continues anyway; to silence it, fix or remove that repository in `/etc/apt/sources.list.d/`.
+- **`/dev/video10` exists but `/dev/video10 is not a video output device`.** A stale `v4l2loopback` 0.12.7 from the HWE stack can be loaded without the `Video Output` capability. Reload it: `sudo modprobe -r v4l2loopback && sudo modprobe v4l2loopback`; if it comes back stale, run the installer again so it builds 0.13.2.
 - **After a kernel update the camera disappears.** DKMS rebuilds the module for the new kernel; if Secure Boot rejects it, run the installer again to sign it.
 - **`OSError: libGLESv2.so.2` or `libEGL.so.1` when starting.** Install `libgles2 libegl1` (the installer does it).
 
@@ -128,7 +129,16 @@ On Windows, run `install.ps1` again.
 | **Normal** (`--mode normal`) | V with index and middle fingers | 0.3 s |
 | **Naruto** (`--mode naruto`) | Palms together in front of the camera | 0.3 s |
 
-Keys (with the VanishCam window focused): `V` vanish, `R` reappear (or restart the setup while calibrating), `SPACE` retake the background photo, `P` pause/resume, `F` fullscreen, `Q` quit. A side panel next to the video shows the next step, the keys and the recent events (use `--no-hud` to hide it); while the background is being captured it also outlines the person so you know whether the camera sees you.
+### Super Saiyan (Dragon Ball mode)
+
+Hold **both clenched fists in front of your face, one on each side of the nose**, for 1.5 seconds. A yellow aura with
+rising flames and sparks surrounds your silhouette (your hair and body are not recolored), the image shakes and a hum
+plays. Repeat the pose or press `S` to power down. Teleporting while transformed keeps the transformation.
+
+Keys (with the VanishCam window focused): `V` vanish, `R` reappear (or restart the setup while calibrating), `S` Super
+Saiyan on/off, `SPACE` retake the background photo, `P` pause/resume, `F` fullscreen, `Q` quit. A side panel next to
+the video shows the next step, the keys and the recent events (use `--no-hud` to hide it); while the background is
+being captured it also outlines the person so you know whether the camera sees you.
 
 **Several cameras?** When you start VanishCam and it finds more than one, it shows a window with a live preview: use `A`/`D` or the arrow keys to change camera, `Enter` to start and `Q` to cancel. You can also list them with `./vanishcam.sh --list-cameras` and force one with `./vanishcam.sh --camera 4` (or `--camera /dev/video4`).
 
@@ -168,7 +178,8 @@ Security problems: please report them privately as described in [SECURITY.md](SE
 
 ## Development
 
-Context for agents and developers in [AGENTS.md](AGENTS.md). Tests:
+Context for agents and developers in [AGENTS.md](AGENTS.md); the algorithm map, measured costs and optimization
+backlog are in [ALGORITHMS.md](ALGORITHMS.md). Tests:
 
 ```bash
 .venv/bin/python -m unittest discover -p 'test_*.py'
@@ -189,6 +200,7 @@ process, and follow the [Code of Conduct](CODE_OF_CONDUCT.md). Contributions are
 ## License
 
 This fork's own code and docs are released under the [MIT license](LICENSE). The upstream project has no license, so
-the code and assets inherited from it remain the copyright of their author and are not covered by the MIT license;
-the MediaPipe models are Google's (Apache-2.0), and pyvirtualcam, a runtime dependency, is GPL-2.0. Details, file by
+the code and assets inherited from it remain the copyright of their author and are not covered by the MIT license.
+`assets/teleport.mp3` and `assets/ssj_transform.mp3` are owner-supplied third-party material and are not MIT either.
+The MediaPipe models are Google's (Apache-2.0), and pyvirtualcam, a runtime dependency, is GPL-2.0. Details, file by
 file, in [NOTICE.md](NOTICE.md).

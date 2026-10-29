@@ -7,6 +7,7 @@ Context for coding agents working on this repo.
 VanishCam: a local webcam app that makes the person "vanish" with an effect when they make a hand gesture, and sends the
 result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_webcam` (remote `upstream`); this fork is
 `Agupane/vanish_webcam` (remote `origin`, branch `main`). User-facing docs: `README.md` (install) and `GUIDE.md` (usage guide).
+Algorithm inventory, measured costs, hot spots and the optimization backlog: [ALGORITHMS.md](ALGORITHMS.md).
 
 ## Layout
 
@@ -15,7 +16,7 @@ result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_web
 | `vanish_cam.py` | Entry point: args, camera/virtual camera, model loading, gesture hold, main loop (state machine) |
 | `dragonball_effect.py` | Dragon Ball mode (default): Instant Transmission pose (two fingers on forehead), teleport render, generated sound |
 | `naruto_effect.py` | Naruto mode: joined palms, smoke + falling log, reverse effect to reappear |
-| `super_saiyan_effect.py` | Super Saiyan (inside Dragon Ball): charge-ki pose, `PowerState`, `AuraRenderer`, spiked golden hair (`HairTracker`, `spike_hair`), synthesized sounds |
+| `super_saiyan_effect.py` | Super Saiyan (inside Dragon Ball): charge-ki pose, `PowerState`, procedural `AuraRenderer` (surrounds the silhouette, never paints the person), synthesized sounds |
 | `vanish_sound.py` | Plays an effect sound (pygame, or `ffplay` fallback); `play(loops, fade_ms)`, `stop(fade_ms)`, `set_volume` |
 | `test_*.py` | unittest suite; `run_loop()` in `test_video_output.py` drives the real loop with a fake clock |
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
@@ -32,7 +33,8 @@ result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_web
 | `LICENSE`, `NOTICE.md` | MIT for this fork's contributions; NOTICE lists upstream (unlicensed) files and third-party licenses |
 | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`, `.github/` | Contributor docs, templates and CI |
 | `hand_landmarker.task`, `face_landmarker.task` | MediaPipe models shipped in the repo |
-| `models/` (gitignored) | Downloaded at runtime: selfie segmenter, gesture recognizer, multiclass segmenter (hair; optional), generated `teleport.wav` and `ssj_*.wav` |
+| `models/` (gitignored) | Downloaded at runtime: selfie segmenter, gesture recognizer, generated `teleport.wav` and `ssj_*.wav` |
+| `ALGORITHMS.md` | Algorithm map for agents: what runs, where, measured cost and what to optimize next |
 
 ## How the loop works
 
@@ -47,10 +49,9 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
 - **Super Saiyan (Dragon Ball only):** a second state machine (`ssj.PowerState`: `off` → `charging` → `flash` →
   `super` → `powering_down`) that runs only in `ready`. The charge pose (two clenched fists in front of the face, one on each side
   of the nose) is read from the same Hand/Face Landmarker result as the teleport (`power_active`; the teleport wins),
-  held 1.5 s with its own `GestureHold`. Hair: `selfie_multiclass_256x256` in IMAGE mode on a head crop at 10 Hz
-  (`hair_mask`); `spike_hair` draws the standing gold crest on top, and the GIF aura replaces the generated one.
-  Without the hair model only the aura is drawn. Teleporting while transformed keeps the golden hair and pauses
-  the hum.
+  held 1.5 s with its own `GestureHold`. The effect is a procedural `AuraRenderer` around the person silhouette
+  (distance transform + rising flames + sparks, half resolution, masked out inside the person): it never recolors the
+  hair or paints the body. Teleporting while transformed keeps the transformation state and pauses/resumes the hum.
 - **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear (restart setup while calibrating), `S` Super Saiyan on/off (Dragon Ball), `SPACE` recalibrate, `P` pause/resume, `F` fullscreen, `Q`/`ESC` quit.
 - **Guided setup:** during calibration the preview outlines the detected person (`draw_setup_marks`, HUD only) and the side panel says whether to step out; `P` freezes the loop and `R` restarts calibration.
 - **Mirroring:** the preview is mirrored; the virtual camera gets the unmirrored image unless `--mirror-output`.
@@ -62,13 +63,14 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
 
 - Never draw text or UI on the video (preview or virtual camera); tests patch `cv2.putText` to fail. Messages go to the terminal.
 - Everything is in English: terminal messages, docs, code comments, docstrings and tests.
-- Do not add more copyrighted anime audio or frames. `assets/teleport.mp3` (copied from `bernardocm10/vanish_webcam` at
-  the owner's request, not MIT) is the only exception; everything else is synthesized. Users may drop their own
-  `assets/teleport.*` and `assets/ssj_*.{MP3,mp3,wav,ogg,m4a,flac}`, which take precedence.
+- Do not add more copyrighted anime audio or frames. The owner-supplied exceptions, all **not MIT**, are
+  `assets/teleport.mp3` (from `bernardocm10/vanish_webcam`) and `assets/ssj_transform.mp3`; everything else is
+  synthesized. Users may drop their own `assets/teleport.*` and `assets/ssj_*.{MP3,mp3,wav,ogg,m4a,flac}`, which take
+  precedence.
 - MediaPipe VIDEO-mode tasks need strictly increasing timestamps: run each task at most once per frame.
 - Keep the loop testable: patchable seams are `gesture_active`, `person_mask`, `person_in_frame`, `create_tasks`,
-  `open_camera`, `open_virtual_camera`, `VanishSound`, `teleport_sound_path`, `power_active`, `hair_mask`,
-  `create_hair_tracker` and `ssj_sound_paths`.
+  `open_camera`, `open_virtual_camera`, `VanishSound`, `teleport_sound_path`, `power_active`, `ssj_sound_paths`,
+  `draw_setup_marks`, `render_status_panel` and `compose_dashboard`.
 - Super Saiyan sounds are synthesized too (`write_charge_sound`, `write_transform_sound`, `write_aura_hum`);
   `assets/ssj_charge.*`, `assets/ssj_transform.*` and `assets/ssj_aura.*` override them.
 
@@ -86,6 +88,9 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m unittest discover -p 'test_*.py'
 ```
+
+For performance work, read [ALGORITHMS.md](ALGORITHMS.md) first; it lists the measured hot spots and the benchmark
+recipes.
 
 After editing `requirements.txt`, regenerate the lock the installers and CI use:
 `uv pip compile requirements.txt --universal --generate-hashes -o requirements.lock.txt`.

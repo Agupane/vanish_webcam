@@ -52,8 +52,6 @@ HAND_MODEL = APP_DIR / "hand_landmarker.task"
 FACE_MODEL = APP_DIR / "face_landmarker.task"
 CUSTOM_SOUND_SUFFIXES = (".MP3", ".mp3", ".WAV", ".wav", ".OGG", ".ogg",
                          ".M4A", ".m4a", ".FLAC", ".flac", ".OPUS", ".opus")
-# Multiclass segmentation (class 1 = hair) for the Super Saiyan's golden hair.
-MULTICLASS_MODEL = MODEL_DIR / "selfie_multiclass_256x256.tflite"
 SSJ_SOUNDS = {
     "ssj_charge": ssj.write_charge_sound,
     "ssj_transform": ssj.write_transform_sound,
@@ -61,10 +59,6 @@ SSJ_SOUNDS = {
 }
 
 MODEL_URLS = {
-    MULTICLASS_MODEL: (
-        "https://storage.googleapis.com/mediapipe-models/image_segmenter/"
-        "selfie_multiclass_256x256/float32/1/selfie_multiclass_256x256.tflite"
-    ),
     SEGMENTER_MODEL: (
         "https://storage.googleapis.com/mediapipe-models/image_segmenter/"
         "selfie_segmenter_landscape/float16/1/"
@@ -79,7 +73,6 @@ MODEL_URLS = {
 MODEL_SHA256 = {
     "selfie_segmenter_landscape.tflite": "490e9ea734313e0de10fa0cd9e3c6133e36ea4db2b7a49bde9ef019f72796b8e",
     "gesture_recognizer.task": "97952348cf6a6a4915c2ea1496b4b37ebabc50cbbf80571435643c455f2b0482",
-    "selfie_multiclass_256x256.tflite": "c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0",
 }
 
 MODES = ("dragonball", "normal", "naruto")
@@ -363,19 +356,10 @@ def download_models(mode: str = "normal") -> None:
     for destination, url in MODEL_URLS.items():
         if mode != "normal" and destination == GESTURE_MODEL:
             continue
-        if mode == "naruto" and destination == MULTICLASS_MODEL:
-            continue
         expected = MODEL_SHA256.get(destination.name)
         if destination.exists() and (
             file_sha256(destination) == expected if expected else destination.stat().st_size > 100_000
         ):
-            continue
-        if destination == MULTICLASS_MODEL:
-            # Optional: without it, Super Saiyan only gets the aura.
-            try:
-                download_model(destination, url, expected)
-            except RuntimeError as error:
-                print(f"[Super Saiyan] {error} Continuing without the golden hair.")
             continue
         download_model(destination, url, expected)
 
@@ -673,8 +657,11 @@ def person_mask(
     if not result.confidence_masks:
         return np.zeros((height, width), dtype=np.float32)
     raw = np.squeeze(result.confidence_masks[0].numpy_view()).astype(np.float32)
+    # Blur at the model resolution and upscale once: blurring 960x540 every
+    # time was one of the most expensive steps in the loop.
+    sigma = max(0.8, 2.2 * raw.shape[1] / max(width, 1))
+    raw = cv2.GaussianBlur(raw, (0, 0), sigmaX=sigma, sigmaY=sigma)
     resized = cv2.resize(raw, (width, height), interpolation=cv2.INTER_LINEAR)
-    resized = cv2.GaussianBlur(resized, (0, 0), sigmaX=2.2, sigmaY=2.2)
     return np.clip((resized - 0.12) / 0.68, 0.0, 1.0)
 
 
@@ -699,10 +686,9 @@ def apply_dissolve(
     if progress >= 0.999:
         return background.copy()
 
-    points = cv2.findNonZero((mask > 0.01).astype(np.uint8))
-    if points is None:
+    x, y, width, height = cv2.boundingRect((mask > 0.01).astype(np.uint8))
+    if width <= 0 or height <= 0:
         return background.copy()
-    x, y, width, height = cv2.boundingRect(points)
     left, top = max(0, x - 18), max(0, y - 18)
     right = min(mask.shape[1], x + width + 18)
     bottom = min(mask.shape[0], y + height + 18)
@@ -982,8 +968,11 @@ def person_in_frame(
     timestamp_ms: int,
     width: int,
     height: int,
+    mask: np.ndarray | None = None,
 ) -> bool:
-    mask = person_mask(segmenter, image, timestamp_ms, width, height)
+    """Whether someone is in the frame; pass `mask` to reuse a fresh one."""
+    if mask is None:
+        mask = person_mask(segmenter, image, timestamp_ms, width, height)
     return float((mask > 0.5).mean()) > PERSON_AREA_LIMIT
 
 
@@ -1017,23 +1006,6 @@ def ssj_sound_paths() -> tuple[Path, Path, Path]:
     return tuple(paths)
 
 
-def create_hair_tracker() -> ssj.HairTracker | None:
-    if not MULTICLASS_MODEL.is_file():
-        print("[Super Saiyan] The hair model is missing: the transformation will only have the aura.")
-        return None
-    try:
-        segmenter = vision.ImageSegmenter.create_from_options(vision.ImageSegmenterOptions(
-            base_options=base_options(MULTICLASS_MODEL),
-            running_mode=vision.RunningMode.IMAGE,
-            output_confidence_masks=True,
-            output_category_mask=False,
-        ))
-    except Exception as error:
-        print(f"[Super Saiyan] Could not load the hair model ({error}): aura only.")
-        return None
-    return ssj.HairTracker(segmenter)
-
-
 def power_active(recognizer, timestamp_ms: int | None = None) -> bool:
     """Ki-charging pose in the detector's latest inference (the teleport wins)."""
     if getattr(recognizer, "last_teleport", False):
@@ -1046,21 +1018,6 @@ def power_active(recognizer, timestamp_ms: int | None = None) -> bool:
     return ssj.charging_from_landmarks(
         getattr(recognizer, "last_hands", []), faces, width, height
     )
-
-
-def hair_mask(tracker: ssj.HairTracker | None, recognizer, frame: np.ndarray,
-              now: float, timestamp_ms: int | None = None) -> np.ndarray | None:
-    if tracker is None:
-        return None
-    width, height = getattr(recognizer, "last_size", (0, 0))
-    faces = getattr(recognizer, "last_faces", [])
-    recent = getattr(recognizer, "recent_faces", None)
-    if not faces and recent is not None and timestamp_ms is not None:
-        faces = recent(timestamp_ms)
-    face = ssj.face_points(faces, width, height)
-    if face is not None and (width, height) != (frame.shape[1], frame.shape[0]):
-        face = None
-    return tracker.update(frame, face, now)
 
 
 def set_fullscreen(enabled: bool) -> None:
@@ -1180,10 +1137,9 @@ def draw_setup_marks(frame: np.ndarray, mask: np.ndarray | None) -> np.ndarray:
     """Outline the detected person while the background is being captured."""
     if mask is None:
         return frame
-    points = cv2.findNonZero((mask > 0.5).astype(np.uint8))
-    if points is None:
+    x, y, w, h = cv2.boundingRect((mask > 0.5).astype(np.uint8))
+    if w <= 0 or h <= 0:
         return frame
-    x, y, w, h = cv2.boundingRect(points)
     cv2.rectangle(frame, (max(0, x - 8), max(0, y - 8)),
                   (min(frame.shape[1] - 1, x + w + 8), min(frame.shape[0] - 1, y + h + 8)),
                   (60, 190, 255), 2, cv2.LINE_AA)
@@ -1211,9 +1167,6 @@ def self_test() -> int:
             recognizer.close()
         finally:
             segmenter.close()
-    hair = create_hair_tracker()
-    if hair is not None:
-        hair.close()
     print("[Webcam] Self-test passed: models, images and audio are present.")
     return 0
 
@@ -1260,15 +1213,9 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     super_saiyan = mode == "dragonball"
     power = ssj.PowerState()
     power_hold = GestureHold(ssj.CHARGE_SECONDS)
-    aura_sprite = ssj.load_aura_sprite() if super_saiyan else None
-    # The GIF already provides the aura: skip the generated one to save CPU.
-    aura = ssj.AuraRenderer() if super_saiyan and aura_sprite is None else None
-    hair_tracker = None
+    aura = ssj.AuraRenderer() if super_saiyan else None
     charge_sound = transform_sound = hum_sound = None
     if super_saiyan:
-        hair_tracker = create_hair_tracker()
-        if hair_tracker is not None:
-            resources.callback(hair_tracker.close)
         # Created after the teleport sound, which owns the mixer and is closed last.
         charge_sound, transform_sound, hum_sound = (
             VanishSound(path, device=audio_device) for path in ssj_sound_paths()
@@ -1381,6 +1328,20 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
 
     paused = False
     last_display: np.ndarray | None = None
+    panel_cache: dict[tuple, np.ndarray] = {}
+
+    def status_panel(phase_key: str, action: str, height: int, lines) -> np.ndarray:
+        """Render the side panel only when its content changes."""
+        key = (phase_key, action, camera_name, height, tuple(lines))
+        panel = panel_cache.get(key)
+        if panel is None:
+            panel = render_status_panel(
+                PANEL_WIDTH, height, mode, phase_key, camera_name, action, list(lines)
+            )
+            if len(panel_cache) >= 6:
+                panel_cache.clear()
+            panel_cache[key] = panel
+        return panel
     try:
         while True:
             ok, camera_frame = capture.read()
@@ -1403,9 +1364,9 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
 
             if paused:
                 frozen = last_display if last_display is not None else camera_frame
-                panel = render_status_panel(
-                    PANEL_WIDTH, frozen.shape[0], mode, "paused", camera_name,
-                    "Paused. Press P to continue, R to restart the setup.", list(log_lines),
+                panel = status_panel(
+                    "paused", "Paused. Press P to continue, R to restart the setup.",
+                    frozen.shape[0], log_lines,
                 )
                 if virtual_camera is not None:
                     send_virtual_frame(virtual_camera, cv2.flip(frozen, 1) if flip_output else frozen)
@@ -1437,12 +1398,6 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 return mp_image
 
-            def golden(frame: np.ndarray, now: float) -> np.ndarray:
-                """With Super Saiyan active, the teleport carries the golden hair along."""
-                if not (super_saiyan and power.transformed):
-                    return frame
-                return ssj.recolor_hair(frame, hair_mask(hair_tracker, recognizer, frame, now, elapsed_ms), 1.0)
-
             def update_mask(every: float) -> np.ndarray | None:
                 nonlocal last_mask, last_mask_at
                 if last_mask is None or now - last_mask_at >= every:
@@ -1461,7 +1416,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 if sampling and now - last_person_check >= PERSON_CHECK_SECONDS:
                     last_person_check = now
                     if (calibration_retries < MAX_CALIBRATION_RETRIES
-                            and person_in_frame(segmenter, frame_image(), elapsed_ms, width, height)):
+                            and person_in_frame(segmenter, frame_image(), elapsed_ms, width, height,
+                                                update_mask(0.3))):
                         calibration_retries += 1
                         log("[Webcam] Someone is still in the frame: step out, waiting 2 more seconds.")
                         # Go back to before the sampling window.
@@ -1560,7 +1516,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     else:
                         # After vanishing, the lines stay on the frozen silhouette.
                         mask = update_mask(0.05) if age < dragonball.VANISH_AT else last_mask
-                        display = dragonball.render_teleport(golden(camera_frame, now), background, mask, age)
+                        display = dragonball.render_teleport(camera_frame, background, mask, age)
                         done = age >= dragonball.EFFECT_SECONDS
                     if done:
                         state.phase = "vanished"
@@ -1581,7 +1537,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                         done = age >= REAPPEAR_SECONDS
                     else:
                         display = dragonball.render_teleport(
-                            golden(camera_frame, now), background, mask,
+                            camera_frame, background, mask,
                             max(0.0, dragonball.EFFECT_SECONDS - age),
                         )
                         done = age >= dragonball.EFFECT_SECONDS
@@ -1594,13 +1550,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
 
                 if super_saiyan and state.phase == "ready" and power.phase != "off":
                     levels = power.levels(now)
-                    hair = hair_mask(hair_tracker, recognizer, camera_frame, now, elapsed_ms) if levels.hair > 0 else None
                     mask = update_mask(0.1)
-                    display = ssj.render_super_saiyan(
-                        camera_frame, mask, hair, levels, now, aura
-                    )
-                    if aura_sprite is not None:
-                        display = aura_sprite.apply(display, levels.aura, now, mask)
+                    display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura)
 
             view_display = display
             if hud and state.phase == "calibrating":
@@ -1612,9 +1563,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
             action, phase_key = status_snapshot(
                 state, mode, super_saiyan, power, gesture_help, calibration_remaining
             )
-            panel = render_status_panel(
-                PANEL_WIDTH, display.shape[0], mode, phase_key, camera_name, action, list(log_lines)
-            )
+            panel = status_panel(phase_key, action, display.shape[0], log_lines)
             cv2.imshow(WINDOW_NAME, compose_dashboard(view_display, panel) if hud else view_display)
 
             key = cv2.waitKey(1) & 0xFF

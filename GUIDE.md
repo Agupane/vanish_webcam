@@ -47,15 +47,24 @@ A stray single-frame gesture no longer makes you vanish, and after each effect y
 
 ### Super Saiyan (Dragon Ball mode)
 
-1. Make fists and hold them **at chest or belly height, one on each side of your body**, as if charging ki. Both fists and your face must be visible.
-2. Hold the pose for **1.5 seconds**: the image shakes, a small aura appears and the charge sound plays. If you let go early, it's cancelled.
-3. A white flash and you're **Super Saiyan**: spiked golden hair and a yellow aura with rising flames and sparks, with a background hum. Hold both clenched fists in front of your face, one on each side of the nose, for 1.5 seconds; repeat the pose (or press `S`) to go back to normal.
+1. Make **two clenched fists** and hold them **in front of your face, one on each side of the nose** (anywhere from
+   the forehead to just below the chin).
+2. Hold the pose for **1.5 seconds**: the image shakes, a small aura starts and the charge sound plays. If you let go
+   early, it's cancelled.
+3. A white flash and you're **Super Saiyan**: a yellow aura with rising flames and sparks surrounds your silhouette.
+   Your hair and body are **not** recolored. A background hum plays.
 4. To go back to normal, repeat the pose for 1.5 seconds or press `S`.
 
-- **Teleport:** if you teleport while transformed, you come back transformed.
-- **Golden hair:** uses an extra Google model downloaded the first time (16 MB). Without it, or if you're bald or wearing a cap, you only get the aura.
-- **Your own sounds:** put `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` or `assets/ssj_aura.MP3` (also `.mp3`, `.wav`, `.ogg`, `.m4a` or `.flac`) and those are used instead of the generated ones. Dragon Ball uses `assets/teleport.mp3`.
-- **The sound plays through your speakers:** it doesn't travel through the virtual camera. Others in the call only hear it if your microphone picks it up (on Ubuntu, `--call-audio` fixes that; on Windows and macOS send it to a virtual cable with `--audio-device`; see [README.md](README.md)).
+- **Teleport:** if you teleport while transformed, you come back transformed; the hum pauses and resumes.
+- **The aura:** it is procedural (no extra model or GIF). It follows the person mask and is drawn only outside your
+  silhouette, so it never paints your hair or clothes. The first version used a GIF and golden-hair recolor; both were
+  removed because they looked wrong.
+- **Your own sounds:** put `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` or `assets/ssj_aura.MP3` (also `.mp3`,
+  `.wav`, `.ogg`, `.m4a` or `.flac`) and those are used instead of the generated ones. Dragon Ball uses
+  `assets/teleport.mp3`.
+- **The sound plays through your speakers:** it doesn't travel through the virtual camera. Others in the call only hear
+  it if your microphone picks it up (on Ubuntu, `--call-audio` fixes that; on Windows and macOS send it to a virtual
+  cable with `--audio-device`; see [README.md](README.md)).
 
 | Key (with the preview window focused) | Action |
 |---|---|
@@ -93,21 +102,32 @@ Chrome only lists the camera once it's receiving video, so the app has to be sta
 ./vanishcam.sh --audio-device "BlackHole 2ch" # play the effects into a virtual cable (Windows/macOS)
 ```
 
-If you don't pass `--camera`, the first real webcam is used and the virtual camera is ignored.
+If you don't pass `--camera`, VanishCam shows the camera picker when it finds several webcams; otherwise it uses the
+first real webcam. Virtual cameras are ignored.
 
 ## Troubleshooting
 
 - **"Virtual camera not available":** run `sudo modprobe v4l2loopback`. If that fails, check the Secure Boot note.
+- **`/dev/video10 is not a video output device`:** a stale `v4l2loopback` 0.12.7 is loaded without the `Video Output`
+  capability. Reload it with `sudo modprobe -r v4l2loopback && sudo modprobe v4l2loopback`; if it comes back stale, run
+  `./install-ubuntu.sh` again so it builds 0.13.2.
 - **The webcam is busy:** close any other app using it (Zoom, Meet, Cheese) before starting VanishCam. In Zoom or Meet, *VanishCam* must be selected, not your webcam.
 - **The preview is black or the wrong camera opens:** run `./vanishcam.sh --list-cameras`, then pick the USB camera with `--camera 4` (or its `/dev/videoN` path). Without `--camera`, VanishCam shows a window with a live preview: `A`/`D` or arrows change camera, `Enter` starts, `Q` cancels.
 - **It erases you badly or leaves smudges:** use a static, well-lit background. If the camera moved, press `SPACE`.
 - **The Dragon Ball gesture doesn't register:** your face must be visible (even if the hand covers part of the forehead), with the index and middle fingers together and the ring and pinky fingers folded. With `--gesture-debug` the terminal shows whether it sees the hand, the face and the pose.
-- **It's slow:** it runs on the CPU only. Lower the resolution with `--width 640 --height 360`.
+- **It's slow:** it runs on the CPU only. Lower the resolution with `--width 640 --height 360`. The biggest costs are
+  the hand/face detector and the person segmenter; the Super Saiyan aura moved from a GIF + hair recolor to a procedural
+  aura and is lighter now.
 - **To uninstall (Ubuntu):** run `./uninstall-ubuntu.sh`. It removes the virtual camera configuration, the DKMS module built by the installer and the Applications menu entry, but keeps the app folder.
 
 ## Differences from the original
 
 - **Dragon Ball mode (new, default):** the original README described it as *Goku*, but it wasn't in the code. It's implemented here; `--mode goku` also works. The teleport sound comes from `assets/teleport.mp3`; if it is missing, a synthesized one is generated.
+- **Super Saiyan (new):** charge with both fists in front of the face and get a procedural aura that surrounds the
+  silhouette; no hair or body recoloring.
+- **Guided setup and HUD (new):** the preview outlines the person while the background is captured, the side panel
+  shows the next step/keys/log, `P` pauses and `R` restarts the setup.
+- **Camera picker (new):** a live preview lets you choose the webcam when there are several.
 - **Held gestures:** previously a single frame with the gesture was enough, which made you vanish by accident.
 - **Reappear with the gesture and with an effect:** previously it was only possible with `R`, without an effect.
 - **Better background photo:** collects 1.5 seconds of frames instead of half a second, and waits if someone is still there.

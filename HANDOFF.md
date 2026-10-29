@@ -1,16 +1,18 @@
 # Handoff — what is left to fix and finish
 
-State as of 2026-10-29 (main around `312e551`). Read `AGENTS.md` first: layout, loop phases, rules and testable seams.
+State as of 2026-10-29, after the procedural-aura refactor (main). Read `AGENTS.md` first: layout,
+loop phases, rules and testable seams. [ALGORITHMS.md](ALGORITHMS.md) has the algorithm inventory, measured costs and
+the optimization backlog.
 
 ## Status
 
 | Area | State |
 |---|---|
-| Modes | Dragon Ball (default) + Super Saiyan, Normal, Naruto. All covered by unit tests (80). **Never tried with a real webcam.** |
+| Modes | Dragon Ball (default) + Super Saiyan, Normal, Naruto. Covered by unit tests (87). The preview and virtual camera have been used with a real webcam; the gestures and the Super Saiyan pose still need owner testing. |
 | CI (`.github/workflows/tests.yml`) | ubuntu-latest ✅, windows-latest ✅, macos-15-intel ✅ (MediaPipe 0.10.14), macos-latest (arm64) ✅ (MediaPipe 1.2.0). Installs from `requirements.lock.txt` with `--require-hashes`. |
-| Ubuntu installer | Rewritten for the owner's machine (22.04, HWE kernel 6.8, Secure Boot likely). **Not yet run on real hardware** after the rewrite. `uninstall-ubuntu.sh` exists and is syntax-checked only. |
+| Ubuntu installer | Run on the owner's machine (22.04, HWE kernel 6.8): built and loaded v4l2loopback 0.13.2, `/dev/video10` advertises `Video Output`, and `pyvirtualcam` sent frames. Secure Boot is disabled there, so the MOK path is still unverified. `uninstall-ubuntu.sh` is syntax-checked only. |
 | Windows / macOS installers | `install.ps1` / `install.sh`. Only syntax-checked; never run end to end on a real machine. |
-| Packaging | `VanishCam.spec` updated (face + multiclass models, new modules); `VanishCam.macos.spec` + `BUILD_MACOS.sh` added. Both **untested**. |
+| Packaging | `VanishCam.spec` updated (face model, new modules, owner assets); `VanishCam.macos.spec` + `BUILD_MACOS.sh` added. Both **untested**. |
 | Language | Everything is English (code, messages, docs). Keep it that way. |
 | Licensing | Upstream (Nicovic17/vanish_webcam) has **no license**. Commit `2a72169` added LICENSE (MIT for this fork's contributions only, with a scope paragraph), NOTICE.md (per-file upstream/fork split, third-party licenses), CHANGELOG, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY and issue/PR templates. Keep NOTICE.md and CHANGELOG.md up to date. |
 
@@ -36,19 +38,20 @@ it without a wrapper. Watch for crashes when sound plays on real hardware.
 
 ## 2. Verify with real hardware (owner)
 
-Nothing has run against a real webcam. Tunables to adjust once someone tries it:
+The preview and virtual camera have been used with a real webcam (AUKEY PC-LM6 on `/dev/video4`). Still owner-dependent:
 
 - **Dragon Ball gesture** (`dragonball_effect.py`): finger straightness `0.8`, tips together `< 0.5 × finger length`, forehead distance `< 0.38 × face width`, hold `1.0 s`.
-- **Super Saiyan** (`super_saiyan_effect.py`): fists `ratio < 0.75`, reach `< 1.15 × knuckle`, 3 of 4 fingers; hand size `0.25–0.9 × face width`; wrists below `chin + 0.5 × face width`; `> 0.35 × face width` from the nose; `AURA_RADIUS = 16`, flame gain `1.3`, noise speed `220 px/s`; hair threshold `(m - 0.35) / 0.4`; `CHARGE_SECONDS 1.5`, `FLASH_SECONDS 0.45`, `POWER_DOWN_SECONDS 0.6`.
+- **Super Saiyan** (`super_saiyan_effect.py`): both clenched fists, at least 2 of 4 fingers curled; hand size `0.2–1.4 × face width`; fist centers between `nose - 1.2 × face width` and `chin + 1.0 × face width`, within `±1.5 × face width` of the nose; one on each side; height difference `< 1.0 × face width`. `CHARGE_SECONDS 1.5`, `FLASH_SECONDS 0.45`, `POWER_DOWN_SECONDS 0.6`; aura `AURA_RADIUS = 22` at half resolution.
+- **Aura look:** it is procedural and masked out inside the person. Tune `AURA_RADIUS`, the flame margins and the spark count in `AuraRenderer`; keep it from painting the person.
 - **Background capture**: 1.5 s sampling, person-area limit 2 %.
-- Use `--gesture-debug` to see what is detected.
-- CPU cost of Super Saiyan (multiclass segmenter at 10 Hz) on older laptops: measure; lower the rate if a frame takes > 40 ms.
+- Use `--gesture-debug` to see the teleport/charge detection in the terminal.
+- CPU cost: see [ALGORITHMS.md](ALGORITHMS.md); the hand/face detector is the biggest cost, the aura is ~11 ms/frame.
 
 ## 3. Ubuntu installer on the owner's PC
 
 - Owner: Ubuntu 22.04, kernel `6.8.0-138-generic`, Python 3.10.6, broken third-party apt repo (yarn NO_PUBKEY). First run failed building `v4l2loopback-dkms` 0.12.7; the package was left half-configured.
 - `install-ubuntu.sh` now purges that package, skips the distro package on kernels ≥ 6.8, builds upstream v4l2loopback 0.13.2 (pinned commit), handles Secure Boot (MOK create/sign/enroll, reboot instructions), installs `libgles2`, and installs Python even if the camera fails.
-- **Unverified:** that 0.13.2 really builds on 6.8 (deduced from source), the Secure Boot path (`mokutil`, MOK manager), DKMS signing of `.ko.zst` modules. Ask the owner for the terminal output from the last `[VanishCam]` line if it fails.
+- **Verified on the owner's machine:** 0.13.2 builds on 6.8, loads, and `/dev/video10` advertises `Video Output`; `pyvirtualcam` sends frames. Secure Boot is disabled there, so the MOK path (`mokutil`, MOK manager), DKMS signing of `.ko.zst` modules and the reload after a kernel update still need a Secure Boot machine.
 - `uninstall-ubuntu.sh` removes `/etc/modules-load.d/vanishcam.conf`, `/etc/modprobe.d/vanishcam.conf`, the DKMS
   module the installer built (only when no distro package owns it), the loaded module and the `.desktop` file. It
   keeps the app folder, `.venv`, `models/` and the MOK key (shared with other modules); verify on hardware.
@@ -76,6 +79,8 @@ Nothing has run against a real webcam. Tunables to adjust once someone tries it:
 - `VanishCam.spec` was updated for the new models/modules but still untested; `VanishCam.macos.spec` /
   `BUILD_MACOS.sh` (a `.app` build) were added, also untested. Build both on real machines before shipping binaries.
 - Ask the upstream author to add a license (owner's decision; don't contact anyone without asking).
+- The golden-hair/spiky-crest pipeline and `saiyanaura.gif` were removed; the Super Saiyan effect is now a procedural
+  aura. Do not reintroduce the GIF without solving the "aura must surround, not paint, the person" problem.
 - pyvirtualcam is **GPL-2.0**: fine for the MIT source (users install it from PyPI), but any packaged binary (PyInstaller `.exe`) that bundles it must comply with GPL-2.0, or pyvirtualcam must be replaced. See NOTICE.md.
 - ~~Owner action: enable "Private vulnerability reporting"~~: enabled on 2026-10-29.
 - GitHub may not detect LICENSE as MIT because of its scope paragraph. If that matters, keep LICENSE as plain MIT and move the scope note to NOTICE.md/README only. The owner has not decided this yet; leaving the scope paragraph is the legally accurate option.
@@ -97,6 +102,7 @@ upstream has no license, so neither does the code in its PRs (see `NOTICE.md`).
 
 ## Dev environment notes
 
-- Tests: `.venv/bin/python -m unittest discover -p 'test_*.py'`; Linux needs `libegl1 libgles2`.
+- Tests: `.venv/bin/python -m unittest discover -p 'test_*.py'` (87 at the time of writing); Linux needs `libegl1 libgles2`.
+- Performance: read [ALGORITHMS.md](ALGORITHMS.md) before optimizing; benchmark with the real camera, not only synthetic frames.
 - MediaPipe tasks crash with `malloc(): unaligned tcache chunk` in headless containers without a GPU/display (seen on the claude-bcn LXC) — this is the environment, not the app; Ubuntu CI runs them fine. Rely on CI for `--self-test`.
 - After changing `.bat`/`.ps1`, keep them pure ASCII (Windows PowerShell 5.1 reads BOM-less files as ANSI); `.gitattributes` forces CRLF for them.

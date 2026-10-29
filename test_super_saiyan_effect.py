@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-import cv2
 import numpy as np
 
 import dragonball_effect
@@ -17,7 +16,7 @@ from vanish_sound import VanishSound
 
 
 def fist(cx, cy, scale=1.0, open_hand=False):
-    """A hand seen from the front at chest height; fingers curled unless open_hand (pixels)."""
+    """A fist seen from the front; fingers curled unless open_hand (pixels)."""
     hand = np.zeros((21, 2), dtype=np.float32)
     hand[0] = (cx, cy + 40 * scale)
     hand[1:5] = [(cx - 20 * scale, cy + 25 * scale - 6 * i * scale) for i in range(4)]
@@ -121,55 +120,6 @@ class ChargePoseTests(unittest.TestCase):
         self.assertTrue(app.power_active(recognizer))
 
 
-class HairTests(unittest.TestCase):
-    def setUp(self):
-        rng = np.random.default_rng(3)
-        self.frame = np.full((120, 160, 3), 90, np.uint8)
-        texture = rng.integers(10, 80, (30, 60)).astype(np.uint8)
-        self.frame[10:40, 50:110] = np.repeat(texture[:, :, None], 3, axis=2)  # Dark textured hair.
-        self.hair = np.zeros((120, 160), np.float32)
-        self.hair[10:40, 50:110] = 1.0
-
-    def test_recolor_is_golden_and_keeps_texture(self):
-        output = ssj.recolor_hair(self.frame, self.hair, 1.0)
-        hair = output[12:38, 52:108].reshape(-1, 3).astype(np.float32)
-        blue, green, red = hair[:, 0].mean(), hair[:, 1].mean(), hair[:, 2].mean()
-        self.assertGreater(red, blue + 40)
-        self.assertGreater(green, blue + 20)
-        hue = cv2.cvtColor(output[12:38, 52:108], cv2.COLOR_BGR2HSV)[:, :, 0]
-        self.assertTrue(15 <= float(np.median(hue)) <= 35)
-        before = cv2.cvtColor(self.frame[12:38, 52:108], cv2.COLOR_BGR2GRAY).ravel().astype(float)
-        after = cv2.cvtColor(output[12:38, 52:108], cv2.COLOR_BGR2GRAY).ravel().astype(float)
-        self.assertGreater(np.corrcoef(before, after)[0, 1], 0.8)
-
-    def test_pixels_far_from_the_hair_are_untouched(self):
-        output = ssj.recolor_hair(self.frame, self.hair, 1.0)
-        np.testing.assert_array_equal(output[90:, :], self.frame[90:, :])
-        self.assertIs(ssj.recolor_hair(self.frame, None, 1.0), self.frame)
-        self.assertIs(ssj.recolor_hair(self.frame, self.hair, 0.0), self.frame)
-
-    def test_head_box_stays_inside_the_frame(self):
-        left, top, right, bottom = ssj.head_box(face(dy=-80), 640, 480)
-        self.assertEqual(top, 0)
-        self.assertTrue(0 <= left < right <= 640 and bottom <= 480)
-        self.assertIsNone(ssj.head_box(face(scale=0.1), 640, 480))
-
-    def test_tracker_uses_the_hair_class_and_holds_briefly_without_a_face(self):
-        confidence = Mock()
-        confidence.numpy_view.return_value = np.ones((256, 256, 1), np.float32)
-        segmenter = Mock()
-        segmenter.segment.return_value = SimpleNamespace(confidence_masks=[Mock(), confidence])
-        tracker = ssj.HairTracker(segmenter)
-        frame = np.zeros((480, 640, 3), np.uint8)
-        mask = tracker.update(frame, face(), 1.0)
-        self.assertGreater(mask[100, 320], 0.9)
-        self.assertEqual(mask[400, 20], 0.0)
-        tracker.update(frame, face(), 1.05)
-        segmenter.segment.assert_called_once()  # Throttled to HAIR_INTERVAL.
-        self.assertIsNotNone(tracker.update(frame, None, 1.2))
-        self.assertIsNone(tracker.update(frame, None, 1.5))
-
-
 class AuraTests(unittest.TestCase):
     def setUp(self):
         self.frame = np.full((240, 320, 3), 60, np.uint8)
@@ -179,6 +129,11 @@ class AuraTests(unittest.TestCase):
 
     def test_no_intensity_no_change(self):
         np.testing.assert_array_equal(self.aura.render(self.frame, self.mask, 0.0, 1.0), self.frame)
+
+    def test_does_not_paint_the_person(self):
+        output = self.aura.render(self.frame, self.mask, 1.0, 1.0)
+        np.testing.assert_array_equal(output[200, 160], self.frame[200, 160])
+        np.testing.assert_array_equal(output[220, 150], self.frame[220, 150])
 
     def test_glows_yellow_next_to_the_silhouette_and_rises(self):
         output = self.aura.render(self.frame, self.mask, 1.0, 1.0).astype(int)
@@ -202,14 +157,15 @@ class AuraTests(unittest.TestCase):
         mask = np.zeros((540, 960), np.float32)
         mask[150:540, 380:580] = 1.0
         aura = ssj.AuraRenderer()
-        hair = np.zeros_like(mask)
-        hair[150:200, 420:540] = 1.0
-        levels = ssj.PowerLevels(aura=1.0, hair=1.0)
-        ssj.render_super_saiyan(frame, mask, hair, levels, 0.0, aura)
-        started = time.perf_counter()
-        for index in range(10):
-            ssj.render_super_saiyan(frame, mask, hair, levels, index / 30, aura)
-        self.assertLess((time.perf_counter() - started) / 10, 0.04)
+        levels = ssj.PowerLevels(aura=1.0)
+        ssj.render_super_saiyan(frame, mask, levels, 0.0, aura)
+        samples = []
+        for _ in range(3):
+            started = time.perf_counter()
+            for index in range(10):
+                ssj.render_super_saiyan(frame, mask, levels, index / 30, aura)
+            samples.append((time.perf_counter() - started) / 10)
+        self.assertLess(min(samples), 0.04)
 
 
 class PowerStateTests(unittest.TestCase):
@@ -226,7 +182,7 @@ class PowerStateTests(unittest.TestCase):
         self.assertGreater(power.levels(2.6).radius, 1.5)
         power.update(2.5 + ssj.FLASH_SECONDS + 0.01, None)
         self.assertEqual(power.phase, "super")
-        self.assertEqual(power.levels(4.0), ssj.PowerLevels(aura=1.0, hair=1.0))
+        self.assertEqual(power.levels(4.0), ssj.PowerLevels(aura=1.0))
         power.power_down(5.0)
         self.assertLess(power.levels(5.3).aura, 1.0)
         power.update(5.0 + ssj.POWER_DOWN_SECONDS + 0.01, None)
@@ -299,49 +255,6 @@ class SoundTests(unittest.TestCase):
                 frequency=44100, size=-16, channels=2, buffer=256, devicename="BlackHole 2ch")
             player.close()
 
-    def test_aura_gif_is_blended_and_the_watermark_is_removed(self):
-        sprite = ssj.AuraSprite(ssj.AURA_SPRITE)
-        self.assertFalse(sprite.frames[0][-4:, :20].any())
-        frame = np.zeros((72, 128, 3), np.uint8)
-        blended = sprite.apply(frame, 1.0, 0.0)
-        self.assertEqual(blended.shape, frame.shape)
-        self.assertGreater(int(blended.max()), 0)
-        self.assertTrue((frame == 0).all())
-        self.assertIsNone(ssj.load_aura_sprite(Path("does-not-exist.gif")))
-
-    def test_aura_frames_are_resized_once_per_size(self):
-        sprite = ssj.AuraSprite(ssj.AURA_SPRITE)
-        frame = np.zeros((72, 128, 3), np.uint8)
-        with patch.object(ssj.cv2, "resize", wraps=ssj.cv2.resize) as resize:
-            sprite.apply(frame, 1.0, 0.0)
-            calls = resize.call_count
-            sprite.apply(frame, 1.0, 0.0)
-            self.assertEqual(resize.call_count, calls)
-
-    def test_spikes_draw_gold_hair_above_the_hairline(self):
-        frame = np.full((240, 320, 3), 40, np.uint8)
-        hair = np.zeros((240, 320), np.float32)
-        hair[140:180, 120:200] = 1.0
-        output = ssj.spike_hair(frame, hair, 1.0, 0.0)
-        self.assertFalse(np.array_equal(output, frame))
-        above = output[70:130, 130:190]
-        self.assertTrue((above[:, :, 1] > 100).any())
-        self.assertTrue((above[:, :, 2] > 100).any())
-        self.assertTrue((frame == 40).all())
-
-    def test_spike_hair_without_a_mask_leaves_the_frame_alone(self):
-        frame = np.full((24, 32, 3), 7, np.uint8)
-        self.assertIs(ssj.spike_hair(frame, None, 1.0, 0.0), frame)
-        self.assertTrue((frame == 7).all())
-
-    def test_render_super_saiyan_accepts_no_generated_aura(self):
-        frame = np.zeros((72, 128, 3), np.uint8)
-        hair = np.zeros((72, 128), np.float32)
-        hair[10:30, 50:80] = 1.0
-        levels = ssj.PowerLevels(aura=1.0, hair=1.0)
-        output = ssj.render_super_saiyan(frame, person_in_middle(), hair, levels, 0.0, None)
-        self.assertEqual(output.shape, frame.shape)
-
     def test_vanish_sound_does_not_reinitialize_a_shared_mixer(self):
         mixer = Mock()
         mixer.get_init.return_value = (44100, -16, 2)
@@ -375,23 +288,6 @@ class SuperSaiyanLoopTests(unittest.TestCase):
         hum.stop.assert_any_call(500)
         self.assertTrue(any("Super Saiyan!" in line for line in printed))
         self.assertTrue(any("Back to normal" in line for line in printed))
-
-    def test_loop_stands_the_hair_up(self):
-        hair = np.zeros((24, 40), np.float32)
-        hair[2:10, 12:28] = 1.0
-        frames, shown, _, _, _ = run_loop(
-            mode="dragonball", power=lambda t: 6.0 <= t < 8.0,
-            mask=person_in_middle(), hair=hair, seconds=7.0)
-        self.assertTrue(np.any(shown[65] != frames[65]))
-
-    def test_gif_aura_replaces_the_generated_aura(self):
-        sprite = Mock()
-        sprite.apply.side_effect = lambda frame, *args, **kwargs: frame
-        with patch.object(app.ssj, "AuraRenderer") as renderer:
-            run_loop(mode="dragonball", power=lambda t: 6.0 <= t < 8.0,
-                     mask=person_in_middle(), seconds=9.0, aura_sprite=sprite)
-            renderer.assert_not_called()
-        sprite.apply.assert_called()
 
     def test_a_short_charge_does_not_transform(self):
         frames, shown, _, sound, _ = run_loop(

@@ -184,10 +184,9 @@ def render_teleport(frame: np.ndarray, background: np.ndarray, mask: np.ndarray,
     """Outgoing teleport. For the return, use age = EFFECT_SECONDS - elapsed time."""
     if age >= EFFECT_SECONDS or mask is None:
         return background.copy()
-    points = cv2.findNonZero((mask > 0.2).astype(np.uint8))
-    if points is None:
+    x, y, w, h = cv2.boundingRect((mask > 0.2).astype(np.uint8))
+    if w <= 0 or h <= 0:
         return background.copy()
-    x, y, w, h = cv2.boundingRect(points)
     margin = 24
     left, top = max(0, x - margin), max(0, y - margin)
     right = min(mask.shape[1], x + w + margin)

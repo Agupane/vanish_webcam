@@ -11,7 +11,8 @@ All notable changes to this fork are documented here. The format is based on
   `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `SECURITY.md`, `.editorconfig`, issue and pull
   request templates, and an "About this fork" section in the README.
 - Super Saiyan transformation inside Dragon Ball mode: hold the charge-ki pose for 1.5 s to get an aura and golden
-  hair (multiclass hair segmentation), with synthesized charge, transform and aura sounds; `S` toggles it (`763da74`).
+  hair (multiclass hair segmentation; later replaced by the procedural aura), with synthesized charge, transform and
+  aura sounds; `S` toggles it (`763da74`).
 - Installers for Windows (`install.ps1` with uv and OBS via winget), macOS (`install.sh` with uv and OBS) and Linux,
   launchers `vanishcam.sh` / `vanishcam.bat`, and CI that runs the tests and `--self-test` on Ubuntu, Windows, macOS
   arm64 and macOS Intel (`144ceb7`).
@@ -31,22 +32,26 @@ All notable changes to this fork are documented here. The format is based on
   `.ogg`, `.m4a`, `.flac`).
 - A side status panel next to the preview shows the next step, the keys and the recent events, so the terminal is
   optional. The Qt toolbar with its unreadable buttons and tooltips is hidden.
-- Super Saiyan: the hair is recolored gold and a procedural spiky crest stands it up; the charge pose accepts
-  both fists in front of the face (forehead to chin), not only at chest height. The last good face is reused for
-  a moment when the fists hide it, so the hair mask survives the pose. The aura GIF frames are cached, the
-  generated aura is skipped when the GIF is present and the person mask updates at 10 Hz, removing most of the
-  transformation lag.
+- Super Saiyan: the charge pose accepts both fists in front of the face (forehead to chin), not only at chest
+  height. The last good face is reused for a moment when the fists hide it, so the pose survives the occlusion.
+- Super Saiyan: the effect is now a procedural aura that surrounds the silhouette and never paints the hair or body.
+  The earlier `saiyanaura.gif` + golden-hair/spiky-crest pipeline was removed because it looked wrong. The aura runs
+  at half resolution, the person mask updates at 10 Hz during the transformation, and `render_super_saiyan` stays
+  under the live-video budget.
+- Performance pass: the person mask is blurred at model resolution, `cv2.boundingRect` replaces `findNonZero` in the
+  hot paths, the side panel is cached by content and calibration reuses one mask for the person check and the setup
+  outline.
 - Guided setup while the background is captured: the preview outlines the detected person, the panel says whether to
   step out, `P` pauses/resumes and `R` restarts the setup.
-- Super Saiyan uses the owner-supplied `assets/saiyanaura.gif` (screen-blended, watermark removed) and
-  `assets/ssj_transform.mp3` (not MIT; see NOTICE.md).
+- Super Saiyan uses the owner-supplied `assets/ssj_transform.mp3` (not MIT; see NOTICE.md). The aura is generated
+  procedurally, so no image asset is needed.
 - Ubuntu installs the app icon (`assets/vanish_icon.png`) and uses it for the Applications menu entry instead of the
   generic camera icon.
 - `requirements.lock.txt`: pinned dependencies with hashes, installed with `--require-hashes` by every installer and by
   CI. The installers also verify the SHA-256 of the pinned uv installer and accept `VANISHCAM_REF` to install a tag or
   commit instead of `main`.
 - Experimental macOS `.app` build (`VanishCam.macos.spec`, `BUILD_MACOS.sh`); the Windows PyInstaller spec now bundles
-  the face model, the Super Saiyan model and the new modules.
+  the face model and the new modules.
 - Dragon Ball mode, now the default: Instant Transmission pose (two fingers on the forehead, held 1 s) with speed lines,
   a flash and a synthesized teleport sound (`686a50b`).
 - Ubuntu support: the virtual camera goes through v4l2loopback (device named VanishCam) for Zoom and Google Meet,

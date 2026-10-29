@@ -14,20 +14,14 @@ resources = [
     (root / "assets" / "substitution_log.png", "assets"),
     (root / "assets" / "vanish.MP3", "assets"),
     (root / "assets" / "teleport.mp3", "assets"),
-    (root / "assets" / "saiyanaura.gif", "assets"),
     (root / "assets" / "ssj_transform.mp3", "assets"),
     (root / "assets" / "vanish_icon.png", "assets"),
-]
-# Super Saiyan without this model keeps the aura and skips the golden hair.
-optional = [
-    (root / "models" / "selfie_multiclass_256x256.tflite", "models"),
 ]
 missing = [str(path) for path, _ in resources if not path.is_file()]
 if not icon_file.is_file():
     missing.append(str(icon_file))
 if missing:
     raise SystemExit("Missing files required for the build:\n" + "\n".join(missing))
-resources += [item for item in optional if item[0].is_file()]
 
 a = Analysis(
     [str(root / "vanish_cam.py")],
