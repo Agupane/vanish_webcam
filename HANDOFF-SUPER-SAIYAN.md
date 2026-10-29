@@ -120,6 +120,40 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
 - [ ] E5.2 `install.sh` end to end on a real Mac, OBS virtual camera, Meet test.
 - [ ] E5.3 Audio: watch for the duplicate SDL2 crash (HANDOFF.md §1). E5.4 `.app` build (`BUILD_MACOS.sh`).
 
+### Resume on Windows (owner's machine, from 2026-10-29)
+
+The owner continues on Windows with a new Claude Code session (the claude-bcn session cannot run on their PC). State
+at handoff: branch `feat/ssj-realism`, everything committed and pushed, CI green on Ubuntu, Windows and macOS arm64.
+Done: E1.1–E1.7, E3.3, E4.0–E4.3. **Next: the owner gates E1.8 (aura) and E4.4 (hair, eyes, brows) on Windows**,
+then the same on Ubuntu, then merge (the owner merges) and E2.
+
+Setup in PowerShell (not as administrator), in a separate folder so an existing install is not touched:
+
+```powershell
+winget install --id Git.Git -e            # only if git is missing; reopen PowerShell afterwards
+git clone -b feat/ssj-realism https://github.com/Agupane/vanish_webcam.git $HOME\VanishCam-ssj
+cd $HOME\VanishCam-ssj
+powershell -ExecutionPolicy Bypass -File .\install.ps1   # uses this folder; repoints the Desktop shortcut here
+```
+
+Run and check:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -p "test_*.py"   # 111 tests expected to pass
+.\.venv\Scripts\python.exe tools\aura_preview.py --show           # synthetic aura preview, no camera
+.\vanishcam.bat --ssj-hair-photos   # SPACE take, S skip, Q quit; prints the prompt (also ssj_hair\prompt.txt)
+# owner: make ssj_hair\ssj_front.png (+ ssj_left.png, ssj_right.png) with ChatGPT/Gemini
+.\vanishcam.bat                     # terminal must say "Golden hair ready"
+```
+
+In Meet/Zoom pick **OBS Virtual Camera** (do not start OBS's own virtual camera) and **turn off background blur**.
+Take the background photo with the chair in place. Ask the owner for screenshots: light wall and darker room,
+transformed, moving the head. What to look for: chair not wrapped, aura not lagging, FPS like `main`, hair fitted on
+the head (no forehead taken as hair, real hair not peeking out), teal irises, golden brows, the flicker late in the
+charge. Tune in `super_saiyan_effect.py` (`AURA_TONES`, `AURA_RADIUS`, `FLAME_RISE`, `DARKEN`, `GLOW`) and
+`ssj_face.py` (`EYE_COLOR`, `BROW_COLOR`, `hair_mask` thresholds). After pulling new commits: `git pull`; rerun
+`install.ps1` only if `requirements.lock.txt` changed. Keep `.bat`/`.ps1` files pure ASCII.
+
 ### Progress log
 
 - 2026-10-29: plan written; E1 started on `feat/ssj-realism`.
