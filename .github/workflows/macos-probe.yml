@@ -1,6 +1,8 @@
 name: macos arm64 mediapipe probe
 
 on:
+  push:
+    branches: [fix/macos-arm64-mediapipe]
   workflow_dispatch:
 
 permissions:
