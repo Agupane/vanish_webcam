@@ -1,0 +1,91 @@
+# Notice
+
+VanishCam is a fork of [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam) by Nicola Auriemma
+(Nicovic17). This file lists what in this repository is covered by the [MIT license](LICENSE) and what is not.
+It states facts about the history and the licenses involved; it is not legal advice.
+
+## Upstream code has no license
+
+The upstream repository has no `LICENSE` file, GitHub reports no license for it, and its files carry no license or
+copyright notices. Without a license, the upstream author keeps all rights to their work. This fork therefore
+**cannot relicense upstream code or assets**: the MIT license in [LICENSE](LICENSE) applies only to the contributions
+made in this fork. We have not asked the upstream author for a license yet; the recommended fix is to ask them to add
+one (ideally MIT, to match this fork), after which this notice can be simplified.
+
+The fork point is upstream commit `1e008cf` (24 October 2026). Commits `f0f4372` to `1e008cf` are upstream's (author
+"nicola"); every later commit was made in this fork. The breakdown below comes from `git log` and `git blame -w -M -C`
+at the time of writing.
+
+### Written in this fork (MIT)
+
+These files did not exist upstream:
+
+- `dragonball_effect.py`, `super_saiyan_effect.py` and their tests `test_dragonball_effect.py`,
+  `test_super_saiyan_effect.py`. Upstream's README described a "Goku" mode, but no code for it was ever published
+  upstream; this implementation is new (`git blame -C` matches only a few generic lines, such as imports, to upstream).
+- Installers and launchers: `install.sh`, `install-ubuntu.sh`, `install.ps1`, `vanishcam.sh`, `vanishcam.bat`.
+- Docs and project files: `GUIDE.md`, `AGENTS.md`, `LICENSE`, `NOTICE.md`, `CHANGELOG.md`, `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, see its attribution section), `SECURITY.md`, `.editorconfig`, and
+  everything under `.github/`.
+- Sounds generated at runtime (`models/teleport.wav`, `models/ssj_*.wav`) are synthesized by this fork's code.
+
+### Upstream files modified in this fork (mixed)
+
+The upstream-authored parts of these files remain the upstream author's; the changes made here are MIT. Approximate
+share of current lines last written upstream, per `git blame`:
+
+| File | Upstream share | Notes |
+|---|---|---|
+| `vanish_cam.py` | ~56% | Main app; this fork added Dragon Ball/Super Saiyan, gesture hold, background capture, virtual camera changes, model verification |
+| `naruto_effect.py` | ~89% | Naruto effect; this fork added the reverse (reappear) effect |
+| `vanish_sound.py` | ~67% | Sound playback; this fork added looping, fades and volume |
+| `test_vanish_cam.py`, `test_naruto_effect.py`, `test_video_output.py` | ~72%, ~81%, ~43% | Upstream tests, extended here |
+| `README.md` | ~25% | Rewritten here; some lines survive from upstream's README |
+| `README_ORIGINAL.md` | ~94% | Upstream's README, kept for reference with a header note added here |
+| `run3.py` | ~94% | Upstream meme tracker; only its strings were translated here |
+| `requirements.txt`, `.gitignore`, `.gitattributes`, `AVVIA_LOCALE.bat`, `BUILD_WINDOWS.bat`, `VanishCam.spec`, `assets/README.md` | mostly upstream | Small edits here (pins, line endings, translation, delegation to `vanishcam.bat`) |
+
+### Upstream files and assets not modified (not MIT)
+
+`AVVIA_OBS.bat`, `AVVIA_VIRTUAL.bat`, `assets/substitution_log.png`, `assets/vanish.MP3` and
+`assets/vanish_icon.ico` come from upstream unchanged. They are **not** covered by the MIT license. `assets/README.md`
+says the log sprite was generated with an image generation tool; the origin and terms of `vanish.MP3` and the icon are
+not documented upstream.
+
+## MediaPipe models (Google, Apache-2.0)
+
+`hand_landmarker.task` and `face_landmarker.task` (committed upstream) and the models downloaded at runtime into
+`models/` (`selfie_segmenter_landscape.tflite`, `gesture_recognizer.task`, `selfie_multiclass_256x256.tflite`, from
+`storage.googleapis.com/mediapipe-models`) are published by Google for [MediaPipe](https://github.com/google-ai-edge/mediapipe)
+under the Apache License 2.0. See each model's card in the
+[MediaPipe documentation](https://ai.google.dev/edge/mediapipe/solutions/guide) for details.
+
+## Third-party dependencies
+
+None of these are vendored in this repository; they are installed from PyPI (or, for v4l2loopback, the distro or its
+upstream source) on the user's machine.
+
+| Component | License | Notes |
+|---|---|---|
+| [mediapipe](https://pypi.org/project/mediapipe/) | Apache-2.0 | |
+| [opencv-contrib-python](https://pypi.org/project/opencv-contrib-python/) | Apache-2.0 (OpenCV 4.5 and later) | The wheels bundle third-party libraries such as FFmpeg (LGPL) |
+| [numpy](https://pypi.org/project/numpy/) | BSD-3-Clause | Recent wheels also include 0BSD, MIT, Zlib and CC0-1.0 parts |
+| [pyvirtualcam](https://github.com/letmaik/pyvirtualcam) | GPL-2.0 | See below |
+| [pygame](https://pypi.org/project/pygame/) | LGPL-2.1 | |
+| [v4l2loopback](https://github.com/umlaeute/v4l2loopback) | GPL-2.0 | Linux kernel module, installed from the distro or built from a pinned upstream commit on the user's machine |
+| [uv](https://github.com/astral-sh/uv) | MIT or Apache-2.0 | Installed by `install.sh` / `install.ps1` to manage Python; not a library |
+| [OBS Studio](https://obsproject.com) | GPL-2.0 or later | Installed by the installers on Windows/macOS for its virtual camera; a separate program |
+
+### pyvirtualcam is GPL-2.0
+
+pyvirtualcam (the library that sends frames to the virtual camera) is licensed under the GNU GPL v2: its PyPI
+classifier says "GPLv2", its GitHub repository reports GPL-2.0 and its wheels ship the GPL-2.0 text. VanishCam imports
+it at runtime but does not include or redistribute it; users install it themselves from PyPI. The MIT license is
+compatible with the GPL, so this source code can be MIT while using pyvirtualcam. However, anyone who **distributes a
+bundled build** that includes pyvirtualcam (for example a PyInstaller `.exe` made with `VanishCam.spec`) distributes a
+combined work that includes GPL-2.0 code and must comply with the GPL-2.0 terms for it (offering the corresponding
+source, and so on). Replacing pyvirtualcam would be needed to ship such a build under non-GPL terms only.
+
+## Keeping this file up to date
+
+When adding a file, a model, an asset or a dependency, update this notice (see [CONTRIBUTING.md](CONTRIBUTING.md)).

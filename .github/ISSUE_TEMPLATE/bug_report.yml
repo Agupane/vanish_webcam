@@ -1,0 +1,74 @@
+name: Bug report
+description: Something doesn't work (install, camera, gestures, effects, sound).
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please check the troubleshooting sections in README.md and GUIDE.md first.
+        Security problems go through a private advisory (see SECURITY.md), not here.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Ubuntu 24.04
+        - Ubuntu 22.04
+        - Other Linux (say which below)
+        - Windows 11
+        - Windows 10
+        - macOS on Apple silicon
+        - macOS on Intel
+    validations:
+      required: true
+  - type: input
+    id: os-details
+    attributes:
+      label: OS details
+      description: Version, kernel (`uname -r` on Linux), Secure Boot on/off if relevant.
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install method
+      options:
+        - One-line installer (curl | bash or irm | iex)
+        - Cloned repo and ran the installer
+        - Manual venv + pip install -r requirements.txt
+        - Other (say which below)
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: VanishCam mode
+      options:
+        - Dragon Ball (default)
+        - Dragon Ball - Super Saiyan
+        - Normal
+        - Naruto
+        - Not applicable (install problem)
+    validations:
+      required: true
+  - type: input
+    id: camera
+    attributes:
+      label: Camera and video app
+      description: Webcam model, and where you use the virtual camera (Zoom, Meet, OBS...).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Terminal output
+      description: Paste the installer or VanishCam terminal output. Remove anything private.
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Command-line options used, screenshots of the preview, etc.

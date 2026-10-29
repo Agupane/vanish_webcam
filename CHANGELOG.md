@@ -1,0 +1,56 @@
+# Changelog
+
+All notable changes to this fork are documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project has no versioned releases yet.
+
+## [Unreleased]
+
+### Added
+
+- `LICENSE` (MIT, for this fork's contributions), `NOTICE.md` (upstream code and third-party licenses),
+  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `SECURITY.md`, `.editorconfig`, issue and pull
+  request templates, and an "About this fork" section in the README.
+- Super Saiyan transformation inside Dragon Ball mode: hold the charge-ki pose for 1.5 s to get an aura and golden
+  hair (multiclass hair segmentation), with synthesized charge, transform and aura sounds; `S` toggles it (`763da74`).
+- Installers for Windows (`install.ps1` with uv and OBS via winget), macOS (`install.sh` with uv and OBS) and Linux,
+  launchers `vanishcam.sh` / `vanishcam.bat`, and CI that runs the tests and `--self-test` on Ubuntu, Windows, macOS
+  arm64 and macOS Intel (`144ceb7`).
+- `--call-audio` on Linux: a PulseAudio/PipeWire virtual microphone (VanishCam-Mic) that mixes the real microphone
+  with the effect sounds.
+- Dragon Ball mode, now the default: Instant Transmission pose (two fingers on the forehead, held 1 s) with speed lines,
+  a flash and a synthesized teleport sound (`686a50b`).
+- Ubuntu support: the virtual camera goes through v4l2loopback (device named VanishCam) for Zoom and Google Meet,
+  with `install-ubuntu.sh` and `vanishcam.sh` (`e74cb0b`).
+- `GUIDE.md` usage guide and `AGENTS.md` context for contributors and coding agents.
+
+### Changed
+
+- Gestures must be held and released before they trigger again, and the same gesture vanishes and brings the person
+  back, with reappear effects (`686a50b`).
+- Better background capture: the background is the median of the last frames of calibration, and sampling is pushed
+  back while a person is in the frame.
+- The virtual camera gets the unmirrored image (the preview stays mirrored) unless `--mirror-output`.
+- The whole repository (UI messages, docs, comments, tests) is in English; the upstream README is kept as
+  `README_ORIGINAL.md` and the upstream `AVVIA_*.bat` launchers delegate to `vanishcam.bat` (`dcc9c90`, `144ceb7`).
+- `requirements.txt` pins version ranges, with MediaPipe 0.10.14 / numpy < 2 / OpenCV 4.10 on Intel Macs (`144ceb7`).
+
+### Fixed
+
+- `install-ubuntu.sh` recovers from a broken `v4l2loopback-dkms` package (Ubuntu 22.04 with 6.8+ kernels) by
+  building upstream v4l2loopback 0.13.2 with DKMS, and handles Secure Boot module signing / MOK enrollment
+  (`89a44cf`, `11c4d3f`).
+- CI failures on Windows, macOS arm64 and Ubuntu (`66136fc`).
+
+### Security
+
+- Downloaded MediaPipe models are verified against SHA-256 hashes before use (`144ceb7`).
+- The v4l2loopback source built by the installer is pinned to the commit of its release tag (`144ceb7`).
+
+## Upstream baseline - 2026-10-24
+
+This fork starts from [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam) at commit `1e008cf`
+(upstream history `f0f4372`..`1e008cf`, 9 to 24 October 2026): the local webcam vanish app with Normal and Naruto
+modes, a Windows-oriented launcher set (`AVVIA_*.bat`), a PyInstaller build (`VanishCam.spec`, `BUILD_WINDOWS.bat`)
+and the `run3.py` meme tracker. Upstream code is not covered by this fork's license; see [NOTICE.md](NOTICE.md).
+
+[Unreleased]: https://github.com/Agupane/vanish_webcam/compare/1e008cf...main

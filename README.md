@@ -1,10 +1,28 @@
 # VanishCam
 
+[![tests](https://github.com/Agupane/vanish_webcam/actions/workflows/tests.yml/badge.svg)](https://github.com/Agupane/vanish_webcam/actions/workflows/tests.yml)
+
 Disappearance effects for your webcam in Zoom, Google Meet or any video call app. Make a gesture and you vanish from the picture; repeat the gesture and you're back.
 
 The default mode is **Dragon Ball**: rest your index and middle fingers together on your forehead for 1 second (Instant Transmission) and you're gone with comic speed lines and a flash. There is also **Normal** mode (two-finger V, you dissolve) and **Naruto** mode (palms together, smoke and a log).
 
-Everything is processed on your computer: the video is not recorded or sent to any server. This is a fork of [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam) (original README in [README_ORIGINAL.md](README_ORIGINAL.md)).
+Everything is processed on your computer: the video is not recorded or sent to any server.
+
+## About this fork
+
+This is a fork of [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam) by Nicola Auriemma, who
+created VanishCam with its Normal and Naruto modes; all credit for the original idea and app goes to them (original
+README in [README_ORIGINAL.md](README_ORIGINAL.md)). This fork adds and changes:
+
+- **Dragon Ball mode** as the default (Instant Transmission), with a **Super Saiyan** transformation (aura and golden hair).
+- **Held, reversible gestures:** hold the pose to vanish, repeat it to come back, with reappear effects.
+- **Better background capture** that waits until you are out of the frame.
+- **Unmirrored output** to the virtual camera (the preview stays mirrored).
+- **Installers** for Linux, macOS and Windows, plus a **virtual microphone** on Linux for the effect sounds.
+- **SHA-256-verified model downloads** and a **pinned v4l2loopback** source build.
+- **English UI** and docs, a **test suite**, and **CI** on Ubuntu, Windows, macOS arm64 and macOS Intel.
+
+The full history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Installation
 
@@ -116,6 +134,8 @@ Effect sounds play through **your speakers**: the virtual camera carries video o
 - On Linux, if the virtual camera has to be built, the installer verifies the exact source commit before building it.
 - The one-line installers (`curl | bash`, `irm | iex`) run whatever is on this repo's `main` branch: if you prefer, clone the repo, review the scripts and run them by hand.
 
+Security problems: please report them privately as described in [SECURITY.md](SECURITY.md).
+
 ## Development
 
 Context for agents and developers in [AGENTS.md](AGENTS.md). Tests:
@@ -123,3 +143,16 @@ Context for agents and developers in [AGENTS.md](AGENTS.md). Tests:
 ```bash
 .venv/bin/python -m unittest discover -p 'test_*.py'
 ```
+
+## Contributing
+
+Contributions are welcome: bug reports, ideas and pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the dev
+setup, the rules (no text drawn on the video, English only, no copyrighted anime assets...) and the pull request
+process, and follow the [Code of Conduct](CODE_OF_CONDUCT.md). Contributions are accepted under the MIT license.
+
+## License
+
+This fork's own code and docs are released under the [MIT license](LICENSE). The upstream project has no license, so
+the code and assets inherited from it remain the copyright of their author and are not covered by the MIT license;
+the MediaPipe models are Google's (Apache-2.0), and pyvirtualcam, a runtime dependency, is GPL-2.0. Details, file by
+file, in [NOTICE.md](NOTICE.md).

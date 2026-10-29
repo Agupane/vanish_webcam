@@ -25,6 +25,8 @@ result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_web
 | `AVVIA_*.bat` | Upstream launcher names, now delegating to `vanishcam.bat` |
 | `VanishCam.spec`, `BUILD_WINDOWS.bat` | Upstream PyInstaller build; not maintained here |
 | `README_ORIGINAL.md` | Upstream README (English), kept for reference |
+| `LICENSE`, `NOTICE.md` | MIT for this fork's contributions; NOTICE lists upstream (unlicensed) files and third-party licenses |
+| `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`, `.github/` | Contributor docs, templates and CI |
 | `run3.py` | Unrelated upstream meme tracker; missing its `memes/` assets. Ignore it |
 | `hand_landmarker.task`, `face_landmarker.task` | MediaPipe models shipped in the repo |
 | `models/` (gitignored) | Downloaded at runtime: selfie segmenter, gesture recognizer, multiclass segmenter (hair; optional), generated `teleport.wav` and `ssj_*.wav` |
@@ -59,6 +61,14 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
   `create_hair_tracker` and `ssj_sound_paths`.
 - Super Saiyan sounds are synthesized too (`write_charge_sound`, `write_transform_sound`, `write_aura_hum`);
   `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` and `assets/ssj_aura.MP3` override them.
+
+## License
+
+- New files and changes in this fork are MIT ([LICENSE](LICENSE)). Upstream (`Nicovic17/vanish_webcam`) has no
+  license, so its code and assets are not MIT: don't relicense them or copy them into new files.
+- Do not copy code or assets from sources without a license, or with one incompatible with MIT.
+- Keep [NOTICE.md](NOTICE.md) in sync: list any new model, asset, dependency or upstream-derived file there, and
+  add user-visible changes to [CHANGELOG.md](CHANGELOG.md) under *Unreleased*.
 
 ## Tests
 

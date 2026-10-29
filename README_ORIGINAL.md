@@ -2,6 +2,7 @@
 
 > **Original README of [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam), kept for reference.**
 > This fork's setup is in [README.md](README.md) and its usage guide in [GUIDE.md](GUIDE.md); its preview window is now called **VanishCam - Preview** (formerly *Webcam - Anteprima*). The `.exe` download linked below is the upstream author's build, not built from this repo.
+> Some things it describes (the *Particles* mode, `USER_GUIDE_EN_IT.md`) were never published in the upstream repository, so they are not in this repo either. This text is the upstream author's and is not covered by this fork's MIT license; see [NOTICE.md](NOTICE.md).
 
 Video is processed on your computer. It is neither recorded nor sent to a server. The preview window and virtual camera show only the video and effects, without overlaid menus, instructions, or text.
 
