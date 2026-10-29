@@ -21,6 +21,10 @@ All notable changes to this fork are documented here. The format is based on
   so a call can pick them up; documented in the README and the guide.
 - `uninstall-ubuntu.sh` undoes the Ubuntu integration (virtual camera config, DKMS build, menu entry) without touching
   the app folder or the shared Secure Boot key.
+- `update.sh` updates an existing install in place (code, dependencies and models) and keeps `.venv`, `models/` and
+  the virtual camera config.
+- `--list-cameras` and an interactive picker when several webcams are found: the preview no longer silently uses a
+  disabled laptop camera instead of a USB one.
 - `requirements.lock.txt`: pinned dependencies with hashes, installed with `--require-hashes` by every installer and by
   CI. The installers also verify the SHA-256 of the pinned uv installer and accept `VANISHCAM_REF` to install a tag or
   commit instead of `main`.

@@ -2,13 +2,15 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import mediapipe as mp
 
 from vanish_cam import (
-    GestureHold, MultiViewGestureRecognizer, camera_source, find_linux_cameras,
-    mode_name, recognize_gesture, victory_landmark_score,
+    GestureHold, MultiViewGestureRecognizer, camera_source, choose_linux_camera,
+    find_linux_cameras, linux_camera_label, mode_name, recognize_gesture,
+    victory_landmark_score,
 )
 
 
@@ -261,6 +263,30 @@ class LinuxCameraTests(unittest.TestCase):
     def test_camera_accepts_index_or_device_path(self):
         self.assertEqual(camera_source("1"), 1)
         self.assertEqual(camera_source("/dev/video2"), "/dev/video2")
+
+    def test_camera_label_comes_from_sysfs(self):
+        with tempfile.TemporaryDirectory() as root:
+            device = Path(root) / "video2"
+            device.mkdir()
+            (device / "name").write_text("USB Camera\n")
+            self.assertEqual(linux_camera_label("/dev/video2", Path(root)), "USB Camera")
+            self.assertEqual(linux_camera_label("/dev/video9", Path(root)), "")
+
+    def test_multiple_cameras_prompt_for_a_choice(self):
+        answers = iter(["9", "2"])
+        with patch("builtins.print"):
+            chosen = choose_linux_camera(
+                ["/dev/video0", "/dev/video2"], interactive=True,
+                prompt=lambda _: next(answers),
+            )
+        self.assertEqual(chosen, "/dev/video2")
+
+    def test_multiple_cameras_without_a_terminal_use_the_first(self):
+        with patch("builtins.print"):
+            self.assertEqual(
+                choose_linux_camera(["/dev/video0", "/dev/video2"], interactive=False),
+                "/dev/video0",
+            )
 
 
 if __name__ == "__main__":

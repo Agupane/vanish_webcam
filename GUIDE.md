@@ -22,6 +22,8 @@ The script installs the following:
 
 **Secure Boot:** if `apt` asks for a password to sign the module, pick one and reboot. On startup a blue screen (MOK) appears: choose *Enroll MOK* and type that password. Then run `./install-ubuntu.sh` again.
 
+**Updating:** run `./update.sh` in the app folder. It updates the code, the Python dependencies and the models, keeping `.venv`, `models/` and the virtual camera setup.
+
 ## Usage
 
 ```bash
@@ -79,6 +81,7 @@ Chrome only lists the camera once it's receiving video, so the app has to be sta
 
 ```bash
 ./vanishcam.sh --camera /dev/video2          # another webcam (list them with v4l2-ctl --list-devices)
+./vanishcam.sh --list-cameras                # show the real webcams and their names
 ./vanishcam.sh --width 640 --height 360      # less load on older PCs
 ./vanishcam.sh --no-mirror                   # no mirroring, not even in the preview
 ./vanishcam.sh --mirror-output               # send the mirrored image to Zoom/Meet
@@ -93,6 +96,7 @@ If you don't pass `--camera`, the first real webcam is used and the virtual came
 
 - **"Virtual camera not available":** run `sudo modprobe v4l2loopback`. If that fails, check the Secure Boot note.
 - **The webcam is busy:** close any other app using it (Zoom, Meet, Cheese) before starting VanishCam. In Zoom or Meet, *VanishCam* must be selected, not your webcam.
+- **The preview is black or the wrong camera opens:** run `./vanishcam.sh --list-cameras`, then pick the USB camera with `--camera 2` (or its `/dev/videoN` path). From a terminal, VanishCam asks which camera to use when it finds several.
 - **It erases you badly or leaves smudges:** use a static, well-lit background. If the camera moved, press `SPACE`.
 - **The Dragon Ball gesture doesn't register:** your face must be visible (even if the hand covers part of the forehead), with the index and middle fingers together and the ring and pinky fingers folded. With `--gesture-debug` the terminal shows whether it sees the hand, the face and the pose.
 - **It's slow:** it runs on the CPU only. Lower the resolution with `--width 640 --height 360`.

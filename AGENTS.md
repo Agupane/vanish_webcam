@@ -21,6 +21,7 @@ result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_web
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
 | `install-ubuntu.sh` | apt packages, v4l2loopback (falls back to building a pinned upstream commit with DKMS), venv, models, `.desktop` |
 | `uninstall-ubuntu.sh` | Undoes the Ubuntu integration (module config, DKMS build, menu entry); keeps the app folder and the MOK key |
+| `update.sh` | Updates an existing install in place (code, dependencies, models); keeps `.venv`, `models/` and the camera setup |
 | `requirements.txt` / `requirements.lock.txt` | Human-edited ranges / uv-generated lock with hashes, used by the installers and CI |
 | `install.ps1`, `vanishcam.bat` | Windows installer (uv + winget OBS + desktop shortcut) and launcher |
 | `vanishcam.sh` | Launcher for Linux (v4l2loopback device named VanishCam; `--call-audio` builds a PulseAudio/PipeWire virtual mic) and macOS (OBS) |

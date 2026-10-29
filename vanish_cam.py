@@ -175,6 +175,56 @@ def find_linux_cameras(sysfs: Path = Path("/sys/class/video4linux")) -> list[str
     return cameras
 
 
+def linux_camera_label(device: str, sysfs: Path = Path("/sys/class/video4linux")) -> str:
+    """Human-readable name of a /dev/videoN node (empty when sysfs has no name)."""
+    try:
+        return (sysfs / Path(device).name / "name").read_text().strip()
+    except OSError:
+        return ""
+
+
+def choose_linux_camera(
+    cameras: list[str], interactive: bool | None = None, prompt=input
+) -> str:
+    """Ask which webcam to use when there is more than one.
+
+    Without a terminal (desktop launchers, pipes) the first one is used, as before.
+    """
+    if len(cameras) == 1:
+        return cameras[0]
+    print("[Webcam] Cameras found:")
+    for number, device in enumerate(cameras, 1):
+        label = linux_camera_label(device)
+        print(f"  {number}. {device}  {label}".rstrip())
+    if interactive is None:
+        interactive = sys.stdin.isatty()
+    if not interactive:
+        print(f"[Webcam] Using {cameras[0]}; pass --camera to pick another one.")
+        return cameras[0]
+    while True:
+        try:
+            answer = prompt(f"Choose the webcam [1-{len(cameras)}] (Enter = 1): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if not answer:
+            return cameras[0]
+        if answer.isdigit() and 1 <= int(answer) <= len(cameras):
+            return cameras[int(answer) - 1]
+        print("[Webcam] Invalid choice.")
+
+
+def list_linux_cameras() -> None:
+    cameras = find_linux_cameras()
+    if not cameras:
+        print("[Webcam] No real Linux webcams found (virtual cameras are ignored).")
+        return
+    print("[Webcam] Cameras:")
+    for number, device in enumerate(cameras, 1):
+        label = linux_camera_label(device)
+        print(f"  {number}. {device}  {label}".rstrip())
+    print("[Webcam] Pick one with --camera 2 or --camera /dev/video2.")
+
+
 def mode_name(value: str) -> str:
     mode = MODE_ALIASES.get(value.lower(), value.lower())
     if mode not in MODES:
@@ -191,6 +241,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--camera", type=camera_source, default=None,
         help="Webcam number or /dev/videoN path (default: 0; on Linux, the first real webcam)",
+    )
+    parser.add_argument(
+        "--list-cameras", action="store_true",
+        help="List the real webcams detected on Linux and exit",
     )
     parser.add_argument("--width", type=int, default=960, help="Video width")
     parser.add_argument("--height", type=int, default=540, help="Video height")
@@ -383,9 +437,14 @@ def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCa
     system = platform.system()
     if index is None:
         cameras = find_linux_cameras() if system == "Linux" else []
-        index = cameras[0] if cameras else 0
-        if cameras:
-            print(f"[Webcam] Using webcam {index}.")
+        if len(cameras) > 1:
+            index = choose_linux_camera(cameras)
+        elif cameras:
+            index = cameras[0]
+        else:
+            index = 0
+        label = linux_camera_label(index) if isinstance(index, str) else ""
+        print(f"[Webcam] Using webcam {index}" + (f" ({label})" if label else "") + ".")
 
     if system == "Windows":
         capture = cv2.VideoCapture(index, cv2.CAP_DSHOW)
@@ -958,6 +1017,9 @@ def self_test() -> int:
 
 def run() -> int:
     args = parse_args()
+    if getattr(args, "list_cameras", False):
+        list_linux_cameras()
+        return 0
     if getattr(args, "self_test", False):
         return self_test()
     mode = choose_mode() if getattr(args, "menu", False) else (args.mode or DEFAULT_MODE)
