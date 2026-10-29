@@ -16,8 +16,9 @@ FLASH_SECONDS = 0.45
 POWER_DOWN_SECONDS = 0.6
 AURA_SCALE = 0.5
 # Sizes below are in pixels at AURA_SCALE (half resolution).
-AURA_RADIUS = 13.0
-FLAME_RISE = 3.0  # How far the flames climb above the body, in radii.
+AURA_RADIUS = 10.0
+FLAME_RISE = 4.5  # How far the flames climb above the body, in radii.
+GLOW = 0.55  # Soft additive light around the cel shapes: makes them read as light, not paint.
 MAX_RADIUS_SCALE = 2.5 * 1.15  # Flash radius times the pulse: sizes the crop.
 RIM_WIDTH = 6.0
 RIM_ALPHA = 0.45
@@ -33,8 +34,9 @@ NOSE, CHIN, FOREHEAD_TOP = 1, 152, 10
 FACE_LEFT, FACE_RIGHT = 234, 454
 
 # Cel shading: (start of the tone in the flame field, BGR color, opacity).
-AURA_TONES = ((0.20, (40, 185, 255), 0.55), (0.42, (90, 235, 255), 0.75), (0.68, (150, 250, 255), 0.92))
+AURA_TONES = ((0.22, (0, 190, 255), 0.4), (0.45, (20, 230, 255), 0.65), (0.72, (170, 255, 255), 0.9))
 RIM_COLOR = (120, 235, 255)
+HALO_COLOR = (40, 200, 255, 0)  # BGR(A) for cv2.multiply with a scalar.
 
 
 def _tone_luts(tones, edge: float = 0.025) -> tuple[np.ndarray, np.ndarray]:
@@ -216,11 +218,11 @@ class AuraRenderer:
     def __init__(self, seed: int = 77, sparks: int = 36):
         rng = np.random.default_rng(seed)
         self.noise = []
-        for rows, cols in ((16, 48), (24, 80)):
-            # Taller than wide: vertical tongues of fire.
+        for rows, cols in ((6, 28), (10, 44)):
+            # Much taller than wide: big vertical tongues of fire, with a little fine detail.
             coarse = cv2.resize(rng.random((rows, cols), dtype=np.float32), (256, 256), interpolation=cv2.INTER_CUBIC)
-            fine = cv2.resize(rng.random((64, 128), dtype=np.float32), (256, 256), interpolation=cv2.INTER_CUBIC)
-            self.noise.append(np.clip(coarse * 0.7 + fine * 0.3, 0.0, 1.0))
+            fine = cv2.resize(rng.random((32, 96), dtype=np.float32), (256, 256), interpolation=cv2.INTER_CUBIC)
+            self.noise.append(np.clip(coarse * 0.8 + fine * 0.2, 0.0, 1.0))
         self.sparks = sparks
         # Per spark and cycle: edge point, sideways drift, rise speed, size. Cycles repeat after 64.
         self.spark_table = np.random.default_rng(seed + 1).random((sparks, 64, 4))
@@ -313,19 +315,24 @@ class AuraRenderer:
         rising = (cv2.blur(ring, (1, rows), anchor=(0, 0), borderType=cv2.BORDER_REPLICATE)
                   + cv2.blur(ring, (1, max(2, rows // 2)), anchor=(0, 0), borderType=cv2.BORDER_REPLICATE)) * 0.5
         ring = np.maximum(ring, rising * 1.6)
-        field = ring * (self._noise(geometry, t) + 0.3) * (geometry.fade * np.float32(255.0 * intensity))
+        field = ring * (self._noise(geometry, t) * 1.3 + 0.1) * (geometry.fade * np.float32(255.0 * intensity))
         index = np.clip(field, 0, 254).astype(np.uint8)
         # Inside the silhouette there is only the rim light (LUT entry 255).
         index = cv2.max(index, geometry.inside_index)
         color = cv2.LUT(cv2.merge((index, index, index)), COLOR_LUT)
         alpha = ALPHA_LUT[index] * geometry.aura_weight + geometry.rim * np.float32(power)
         self._draw_sparks(color, alpha, geometry, t, power)
+        # A soft halo of light around the flat shapes, kept off the person like the aura.
+        glow = cv2.GaussianBlur(alpha, (0, 0), 4.0) * geometry.aura_weight * np.float32(GLOW * 255.0 * power)
+        glow = np.clip(glow, 0, 255).astype(np.uint8)
+        halo = cv2.multiply(cv2.merge((glow, glow, glow)), HALO_COLOR, scale=1.0 / 255.0)
 
         roi = result[area]
         size = (roi.shape[1], roi.shape[0])
         color = cv2.resize(color, size, interpolation=cv2.INTER_LINEAR)
         alpha = cv2.resize(alpha, size, interpolation=cv2.INTER_LINEAR)
-        result[area] = cv2.blendLinear(roi, color, 1.0 - alpha, alpha)
+        halo = cv2.resize(halo, size, interpolation=cv2.INTER_LINEAR)
+        result[area] = cv2.add(cv2.blendLinear(roi, color, 1.0 - alpha, alpha), halo)
         return result
 
     def _draw_sparks(self, color: np.ndarray, alpha: np.ndarray, geometry: AuraGeometry, t: float,

@@ -60,7 +60,7 @@ The virtual camera only ever receives `display`; the HUD and the setup outline a
 | 11 | Normal dissolve | `vanish_cam.apply_dissolve`, `make_dissolve_fields` | few–10 ms | Full-frame float blend; fields precomputed once |
 | 12 | Naruto substitution | `naruto_effect.render_substitution`, `_smoke_layer`, `overlay_log` | few ms | Smoke on a cropped RGBA layer; log sprite cached per scale |
 | 13 | Super Saiyan power state | `super_saiyan_effect.PowerState` | negligible | `off → charging → flash → super → powering_down` |
-| 14 | Super Saiyan aura | `super_saiyan_effect.AuraRenderer.render`, `refine_person_mask`, `head_ellipse` | ~4–5 ms at 960×540 (claude-bcn; was ~6 ms there, ~11 ms on the owner's CPU) | Geometry (refined mask, distance transforms, rim, contour) cached per mask update; per frame: darken, noise, cel-tone LUT, sparks, one `blendLinear` on the crop. Paints outside the person; inside only a rim band |
+| 14 | Super Saiyan aura | `super_saiyan_effect.AuraRenderer.render`, `refine_person_mask`, `head_ellipse` | ~5.5 ms at 960×540 (claude-bcn; was ~5.9 ms there, ~11 ms on the owner's CPU) | Geometry (refined mask, distance transforms, rim, contour) cached per mask update; per frame: darken, noise, cel-tone LUT, sparks, half-res glow, one `blendLinear` + `add` on the crop. Paints outside the person; inside only a rim band |
 | 15 | Flash and shake | `super_saiyan_effect.render_super_saiyan`, `shake_frame` | <1 ms | `cv2.warpAffine` only when shake > 0 |
 | 16 | HUD panel | `vanish_cam.render_status_panel`, `compose_dashboard` | ~1 ms, cached | Cache keyed by phase/action/camera/height/log; `--no-hud` disables it |
 | 17 | Setup outline | `vanish_cam.draw_setup_marks` | <1 ms | HUD only; reuses the calibration mask, `cv2.boundingRect` |
@@ -142,10 +142,13 @@ Per frame:
 - ring `exp(-d / r)` with a 3 Hz pulse, rising flames with two vertical box blurs (anchored below), two scrolling
   noise textures sampled in frame coordinates (stable when the bbox moves);
 - field → `cv2.LUT` with three flat tones and short anti-aliased steps; LUT entry 255 is the rim inside the person;
-- sparks from a precomputed table; one `cv2.blendLinear` on the crop.
+- sparks from a precomputed table;
+- glow: the alpha blurred at half resolution (sigma 4), outside the person, added as warm light (`GLOW = 0.55`);
+- one `cv2.blendLinear` + one `cv2.add` on the crop.
 
-Measured on claude-bcn (no MediaPipe there): ~3.9 ms with cached geometry, ~4.9 ms with a new mask every third frame
-(main's version: ~5.9 ms on the same CPU). `test_fast_enough_for_live_video` now includes the background step and a
+Measured on claude-bcn (no MediaPipe there), with the background plate: ~5.4–5.6 ms per frame with a new mask every
+third frame (main's version: ~5.9 ms on the same CPU, without the background step). `tools/aura_preview.py` renders the
+look on a synthetic scene. `test_fast_enough_for_live_video` now includes the background step and a
 mask refresh every third frame, with a 20 ms budget.
 
 Ideas:

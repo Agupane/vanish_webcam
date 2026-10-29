@@ -45,16 +45,18 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
   exactly zero deeper inside. *Check:* unit test — edge pixel warmer, interior pixel identical.
   *Done: `RIM_WIDTH = 6` (half res), `RIM_ALPHA = 0.45`; `test_rim_light_only_along_the_inside_edge`,
   `test_does_not_paint_the_person`.*
-- [ ] **E1.6 Cel-shaded aura with flame tongues all around.** 3 flat tones (gold, yellow, near-white inner rim) with
+- [x] **E1.6 Cel-shaded aura with flame tongues all around.** 3 flat tones (gold, yellow, near-white inner rim) with
   short anti-aliased steps, drawn with alpha (visible on light walls, not only additive), tongues from upward-stretched
   scrolling noise sampled in frame coordinates (stable when the bbox moves), tighter than today. *Check:* renders of the
   synthetic scene on a light wall and a dark wall attached to the PR/commit message description; unit test that the
   aura is yellow next to the silhouette, rises above the head and is zero far from it.
   *Code and unit tests done (`test_glows_yellow_next_to_the_silhouette_and_rises`,
-  `test_light_wall_still_shows_a_yellow_aura`). **Pending:** the renders. On claude-bcn the auto-mode permission
-  classifier blocked running the render script, so it is now in the repo: `.venv/bin/python tools/aura_preview.py
-  aura.png` (synthetic light/dark wall + chair + dark hair; columns: two times with the background plate, one
-  without). Run it, look at it, and tune `AURA_TONES`, `AURA_RADIUS`, `FLAME_RISE`, `DARKEN` before asking the owner.*
+  `test_light_wall_still_shows_a_yellow_aura`). Renders with `.venv/bin/python tools/aura_preview.py aura.png`
+  (synthetic light/dark wall + chair + dark hair; columns: two times with the background plate, one without). First
+  render looked muddy (ochre/pastel, uniform band); tuned to saturated tones, a more transparent outer tone, bigger
+  tongues (`AURA_RADIUS 10`, `FLAME_RISE 4.5`, coarser noise) and a half-res additive glow (`GLOW`). Second render:
+  bright yellow flames that read as light on both walls, chair not wrapped with the plate. Further tuning (taller
+  plume above the head, colors) belongs to the owner gate. Cost ~5.5 ms/frame on claude-bcn vs 5.9 ms on main.*
 - [x] **E1.7 Docs.** README + GUIDE: turn off background blur/replacement in Meet/Zoom/Teams while using VanishCam;
   the status panel says so while transformed. CHANGELOG + ALGORITHMS updated.
 - [ ] **E1.8 Gate (owner):** Ubuntu and Windows, real camera, Meet with background effects off: one screenshot on a
@@ -104,6 +106,8 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
 - 2026-10-29: plan written; E1 started on `feat/ssj-realism`.
 - 2026-10-29: E1.1–E1.5 and E1.7 done, E1.6 code done (renders pending); 97 tests pass on claude-bcn (Linux). Next:
   E1.6 renders and tuning, CI on Ubuntu + Windows, then the owner gate E1.8.
+- 2026-10-29: E1.6 rendered and tuned. The workflow now also runs on pushes to `feat/**` (no `gh` token on claude-bcn
+  to open a PR). Next: CI result on Ubuntu + Windows, then the owner gate E1.8.
 
 ## 0. Start here
 

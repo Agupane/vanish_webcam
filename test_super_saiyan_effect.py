@@ -221,7 +221,7 @@ class AuraTests(unittest.TestCase):
                     current = mask.copy()
                 ssj.render_super_saiyan(frame, current, levels, index / 30, aura, background, head)
             samples.append((time.perf_counter() - started) / 15)
-        # 4.9 ms on claude-bcn (main took 5.9 ms there without the background step); CI runners are slower.
+        # ~5.5 ms on claude-bcn (main took 5.9 ms there without the background step); CI runners are slower.
         self.assertLess(min(samples), 0.02)
 
 
