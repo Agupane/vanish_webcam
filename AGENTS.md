@@ -6,7 +6,7 @@ Context for coding agents working on this repo.
 
 VanishCam: a local webcam app that makes the person "vanish" with an effect when they make a hand gesture, and sends the
 result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_webcam` (remote `upstream`); this fork is
-`Agupane/vanish_webcam` (remote `origin`, branch `main`). User-facing docs in Spanish: `README_UBUNTU.md`.
+`Agupane/vanish_webcam` (remote `origin`, branch `main`). User-facing docs in Spanish: `README.md` (install) and `README_UBUNTU.md` (usage guide).
 
 ## Layout
 
@@ -17,8 +17,13 @@ result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_web
 | `naruto_effect.py` | Naruto mode: joined palms, smoke + falling log, reverse effect to reappear |
 | `vanish_sound.py` | Plays an effect sound (pygame, or `ffplay` fallback) |
 | `test_*.py` | unittest suite; `run_loop()` in `test_video_output.py` drives the real loop with a fake clock |
-| `install-ubuntu.sh`, `vanishcam.sh` | Ubuntu installer (v4l2loopback + venv + models) and launcher |
-| `*.bat`, `VanishCam.spec`, `BUILD_WINDOWS.bat` | Upstream Windows launchers/build; still expect a `local_app/` folder and are not maintained here |
+| `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
+| `install-ubuntu.sh` | apt packages, v4l2loopback (falls back to building a pinned upstream commit with DKMS), venv, models, `.desktop` |
+| `install.ps1`, `vanishcam.bat` | Windows installer (uv + winget OBS + desktop shortcut) and launcher |
+| `vanishcam.sh` | Launcher for Linux (v4l2loopback device named VanishCam; `--sonido-en-llamada` builds a PulseAudio/PipeWire virtual mic) and macOS (OBS) |
+| `AVVIA_*.bat` | Upstream launcher names, now delegating to `vanishcam.bat` |
+| `VanishCam.spec`, `BUILD_WINDOWS.bat` | Upstream PyInstaller build; not maintained here |
+| `README_ORIGINAL.md` | Upstream README (English), kept for reference |
 | `run3.py` | Unrelated upstream meme tracker; missing its `memes/` assets. Ignore it |
 | `hand_landmarker.task`, `face_landmarker.task` | MediaPipe models shipped in the repo |
 | `models/` (gitignored) | Downloaded at runtime: selfie segmenter, gesture recognizer, generated `teleport.wav` |
@@ -57,6 +62,15 @@ On a headless Linux box MediaPipe needs `libegl1` (`sudo apt install libegl1`), 
 
 ## Platforms
 
-- **Ubuntu:** supported (`install-ubuntu.sh`, virtual camera via v4l2loopback).
-- **Windows / macOS:** the Python code runs (virtual camera through OBS), but there is no easy installer yet.
-  MediaPipe 1.x has no wheel for Intel Macs.
+- **Ubuntu:** `install.sh` → `install-ubuntu.sh`, virtual camera via v4l2loopback.
+- **Windows:** `install.ps1`, virtual camera via OBS (pyvirtualcam backend `obs`).
+- **macOS:** `install.sh`, virtual camera via OBS 30+ (the user must start/stop OBS's virtual camera once to install
+  the system extension). MediaPipe 1.x has no wheel for Intel Macs, so `requirements.txt` pins MediaPipe 0.10.14,
+  numpy < 2 and OpenCV 4.10 there via environment markers (untested).
+- `.github/workflows/tests.yml` runs the unit tests and `--self-test` on all of them.
+
+## Security
+
+- Downloaded models are checked against `MODEL_SHA256` before use; add the hash when adding a model.
+- The v4l2loopback source built by `install-ubuntu.sh` is pinned to a commit (`V4L2LOOPBACK_COMMIT`).
+- Never write frames to disk or open network connections other than the model downloads.

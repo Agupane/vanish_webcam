@@ -1,77 +1,114 @@
-# VanishCam — webcam disappearance effects
+# VanishCam
 
-> **This fork:** adds the **Dragon Ball** mode (Instant Transmission, now the default; `--mode goku` also works), held gestures, gesture-based reappearance with effects, Ubuntu support and Spanish messages.
-> Setup and usage (Spanish): [README_UBUNTU.md](README_UBUNTU.md). The sections below are the original README; *Particles* mode is still not implemented.
+Efectos de desaparición para tu webcam en Zoom, Google Meet o cualquier app de videollamadas. Hacés un gesto y desaparecés de la imagen; repetís el gesto y volvés.
 
-Video is processed on your computer. It is neither recorded nor sent to a server. The preview window and virtual camera show only the video and effects, without overlaid menus, instructions, or text.
+El modo por defecto es **Dragon Ball**: apoyás índice y medio juntos en la frente durante 1 segundo (la Teletransportación Instantánea) y te vas con líneas de cómic y un destello. También están el modo **Normal** (V con dos dedos, te disolvés) y el modo **Naruto** (palmas juntas, humo y un tronco).
 
-For step-by-step instructions in English and Italian, see the [user guide](USER_GUIDE_EN_IT.md).
+Todo se procesa en tu computadora: el video no se graba ni se manda a ningún servidor. Es un fork de [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam) (README original en [README_ORIGINAL.md](README_ORIGINAL.md)).
 
-## ☕ Buy me a coffee
+## Instalación
 
-If you like this project and want to support it, you can buy me a coffee through [PayPal](https://paypal.me/nicovic17) or [Revolut](https://revolut.me/nicoauriemma).
+| Sistema | Soporte | Cámara virtual |
+|---|---|---|
+| **Ubuntu 22.04 / 24.04** (y Debian) | Completo | v4l2loopback (la instala el instalador) |
+| **Windows 10 / 11** | Completo | OBS Studio (lo instala el instalador) |
+| **macOS con chip Apple** (M1 o posterior) | Completo | OBS Studio 30 o posterior |
+| **macOS con Intel** | Experimental: usa versiones viejas de MediaPipe | OBS Studio 30 o posterior |
 
-## Download for Windows
+Los instaladores bajan unos 300 MB (Python, librerías y modelos) y no tocan el Python de tu sistema.
 
-[Download VanishCam.exe]( https://nicoaauriemma.vercel.app/shop ) and double-click it to run the app. You do not need to install Python.
+### Ubuntu / Linux
 
-The published EXE may predate the Particles and Goku modes. To use them now, run the local scripts or rebuild the EXE from these sources.
-
-## Getting started
-
-1. Double-click `AVVIA_LOCALE.bat`.
-2. In the start menu, choose **Normal Vanish**, **Naruto Vanish**, **Particles**, or **Goku** with the mouse or the `1`, `2`, `3`, and `4` keys.
-3. Step out of the camera frame for 4 seconds while the background is captured. The terminal tells you when you can step back in.
-
-**Normal Vanish:** Raise your index and middle fingers in a V sign. The dissolve starts as soon as the gesture is recognized and lasts about 3.6 seconds.
-
-**Particles:** Make the same V sign as in Normal Vanish. Your silhouette breaks into small colored fragments that drift sideways as if carried by the wind. The effect lasts about 2.1 seconds. It captures your silhouette once when the effect starts to keep the video smooth.
-
-**Goku:** Hold your index and middle fingers straight and together against your forehead for 1 second. Animated vertical comic-style lines run across your silhouette just before you teleport away and linger briefly afterward. To reappear, lower your hand, then repeat the gesture for another 1 second. The return uses the reverse effect. If you break the pose, the countdown starts over. `assets/teleport.MP3` plays on both disappearance and reappearance. The terminal shows the countdown for each gesture. The `V` and `R` keys are disabled in this mode: the gesture is the only way to disappear and reappear. No text is overlaid on the video.
-
-**Naruto Vanish:** Bring your palms together in front of the webcam, with your fingers side by side rather than interlaced. Keep both hands visible. As soon as the gesture is recognized, you vanish in a cloud of smoke and a wooden log appears, falls, and remains visible until you press `R`. No microphone is needed. Naruto mode uses `hand_landmarker.task` to track both hands. `assets/vanish.MP3` plays through your computer speakers when the disappearance starts, including when triggered with `V`. You can trigger it again after pressing `R`.
-
-To start a mode without the menu:
-
-```powershell
-local_app\AVVIA_LOCALE.bat --mode naruto
-local_app\AVVIA_LOCALE.bat --mode normal
-local_app\AVVIA_LOCALE.bat --mode particles
-local_app\AVVIA_LOCALE.bat --mode goku
+```bash
+curl -LsSf https://raw.githubusercontent.com/Agupane/vanish_webcam/main/install.sh | bash
 ```
 
-## Virtual camera and OBS
+O, si preferís revisar el código antes:
 
-If [OBS Studio](https://obsproject.com/) is installed, the app automatically tries to open **OBS Virtual Camera**. The terminal shows the device name. Use `AVVIA_VIRTUAL.bat` to require a virtual camera. Select **OBS Virtual Camera** in the app that will receive the video. OBS's virtual camera must be stopped while this app is producing its output.
-
-To use the effect in an OBS scene, run `AVVIA_OBS.bat`, add a **Window Capture** source, select **Webcam - Anteprima**, and then start the virtual camera from OBS. Alternatively, use [Unity Capture](https://github.com/schellingb/UnityCapture) as a separate virtual video source:
-
-```powershell
-local_app\AVVIA_VIRTUAL.bat --virtual-backend unitycapture
+```bash
+git clone https://github.com/Agupane/vanish_webcam.git ~/VanishCam
+cd ~/VanishCam
+./install.sh
 ```
 
-OBS has only one virtual camera. Do not use it as both an OBS input and output at the same time. See the [pyvirtualcam documentation](https://github.com/letmaik/pyvirtualcam#supported-virtual-cameras).
+Te pide la contraseña de `sudo` para instalar los paquetes y la cámara virtual **VanishCam**. Si el paquete de la cámara virtual de tu Ubuntu no compila para tu kernel (pasa en 22.04 con kernels 6.8), el instalador compila la versión oficial.
 
-## Controls
+**Secure Boot:** si `apt` te pide una contraseña para firmar el módulo, elegí una y reiniciá. Al arrancar aparece una pantalla azul (MOK): elegí *Enroll MOK* → *Continue*, escribí esa contraseña y reiniciá. Después volvé a correr el instalador.
 
-- `SPACE`: capture a new background.
-- `R`: make the person reappear.
-- `V`: manually start the selected mode's effect.
-- `F`: toggle fullscreen.
-- `Q` or `ESC`: quit and release the cameras.
+### Windows
 
-The `V` and `R` keys are disabled in Goku mode.
-
-You can change the camera, resolution, and maximum virtual-output FPS:
+Abrí **PowerShell** (no hace falta como administrador) y pegá:
 
 ```powershell
-local_app\AVVIA_LOCALE.bat --camera 1 --width 1280 --height 720 --fps 30
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Agupane/vanish_webcam/main/install.ps1 | iex"
 ```
 
-To troubleshoot gesture recognition without adding text to the video, pass `--gesture-debug`. Diagnostic information appears only in the terminal.
+O bajá el repo (**Code → Download ZIP**), descomprimilo y hacé clic derecho en `install.ps1` → **Ejecutar con PowerShell**.
 
-## Visual assets
+El instalador deja todo en `%USERPROFILE%\VanishCam`, instala **OBS Studio** con `winget` si no lo tenés (puede pedir permiso de administrador) y crea el acceso **VanishCam** en el Escritorio.
 
-The [wooden log](assets/substitution_log.png) is an original illustration generated with ImageGen using the supplied image as a visual reference. Smoke is drawn in real time by `naruto_effect.py` so it follows the person's position and scales with the video. We also considered a [CC0 smoke sprite sheet](https://opengameart.org/content/smoke-sprite-sheet), but the procedural animation adapts better to dynamic positioning without an additional asset. No anime frames or assets are included in the project.
+### macOS
 
-Goku mode uses the [MediaPipe BlazeFace short-range model](https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/tasks/web/vision/README.md) to estimate the forehead position and `hand_landmarker.task` to track the fingers. The teleport's visual trace is drawn in code, without anime frames.
+Abrí la **Terminal** y pegá:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/Agupane/vanish_webcam/main/install.sh | bash
+```
+
+Si tenés [Homebrew](https://brew.sh), el instalador instala OBS Studio; si no, te abre la página para bajarlo. Después hay que **activar una sola vez la cámara virtual de OBS**:
+
+1. Abrí OBS Studio.
+2. Tocá **Iniciar cámara virtual** y aceptá el permiso que pide macOS (Ajustes del Sistema → General → Ítems de inicio y extensiones → Extensiones de cámara).
+3. Tocá **Detener cámara virtual** y cerrá OBS.
+
+La primera vez que abras VanishCam, macOS pide permiso para que la Terminal use la cámara: aceptalo.
+
+## Uso
+
+| Sistema | Cómo abrirlo |
+|---|---|
+| Ubuntu | Menú de aplicaciones → **VanishCam**, o `~/VanishCam/vanishcam.sh` |
+| Windows | **VanishCam** en el Escritorio, o `vanishcam.bat` |
+| macOS | **VanishCam.command** en el Escritorio, o `~/VanishCam/vanishcam.sh` |
+
+1. Se abre una ventana con tu cámara. **Salí del cuadro**: a los 4 segundos saca la foto del fondo vacío (la terminal te avisa).
+2. Volvé a entrar y hacé el gesto **sosteniéndolo**: desaparecés.
+3. Para volver, **bajá la mano y repetí el gesto**.
+
+| Modo | Gesto | Sostener |
+|---|---|---|
+| **Dragon Ball** (por defecto) | Índice y medio juntos, estirados, apoyados en la frente | 1 s |
+| **Normal** (`--mode normal`) | V con índice y medio | 0,3 s |
+| **Naruto** (`--mode naruto`) | Palmas juntas frente a la cámara | 0,3 s |
+
+Teclas (con la ventana de VanishCam activa): `V` desaparecer, `R` reaparecer, `ESPACIO` foto del fondo de nuevo, `F` pantalla completa, `Q` salir.
+
+**En Zoom o Meet**, primero abrí VanishCam y después elegí la cámara en la configuración de video:
+
+- Ubuntu: **VanishCam**.
+- Windows y macOS: **OBS Virtual Camera**. Si OBS está abierto, no actives su cámara virtual: la usa VanishCam.
+
+Si no aparece, cerrá Zoom del todo (o recargá Meet) y volvé a abrirlo.
+
+La guía completa (opciones, efectos, problemas comunes) está en [README_UBUNTU.md](README_UBUNTU.md); casi todo vale igual para Windows y macOS.
+
+## Sonido de los efectos en la llamada
+
+Los sonidos de los efectos suenan en **tus parlantes**: la cámara virtual lleva solo video. Los demás los escuchan si los levanta tu micrófono, y la supresión de ruido de Zoom/Meet suele borrarlos.
+
+- **Ubuntu:** arrancá con `./vanishcam.sh --sonido-en-llamada`. Crea un micrófono virtual **VanishCam-Microfono** que mezcla tu micrófono real con los efectos (y los seguís escuchando vos). En Zoom/Meet elegí ese micrófono y bajá la supresión de ruido (Zoom: Configuración → Audio → Supresión de ruido de fondo: Baja, o activá "Sonido original para músicos"). Al cerrar VanishCam se desarma solo.
+- **Windows y macOS:** todavía no está automatizado. Hace falta un cable de audio virtual ([VB-Cable](https://vb-audio.com/Cable/) en Windows, [BlackHole](https://github.com/ExistentialAudio/BlackHole) en macOS) y que VanishCam toque los efectos ahí; está en la lista de pendientes.
+
+## Seguridad y privacidad
+
+- El video se procesa solo en tu computadora; VanishCam no guarda imágenes ni abre conexiones de red, salvo la primera descarga de los modelos de Google MediaPipe, que se verifica con SHA-256.
+- En Linux, si hay que compilar la cámara virtual, el instalador verifica el commit exacto del código fuente antes de compilarlo.
+- Los instaladores de una línea (`curl | bash`, `irm | iex`) ejecutan lo que está en la rama `main` de este repo: si preferís, cloná el repo, revisá los scripts y corrélos a mano.
+
+## Desarrollo
+
+Contexto para agentes y desarrolladores en [AGENTS.md](AGENTS.md). Tests:
+
+```bash
+.venv/bin/python -m unittest discover -p 'test_*.py'
+```

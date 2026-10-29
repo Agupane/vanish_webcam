@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import platform
 import sys
@@ -55,6 +56,11 @@ MODEL_URLS = {
         "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/"
         "gesture_recognizer/float16/1/gesture_recognizer.task"
     ),
+}
+# Hash dei modelli ufficiali verificati: un download diverso viene scartato.
+MODEL_SHA256 = {
+    "selfie_segmenter_landscape.tflite": "490e9ea734313e0de10fa0cd9e3c6133e36ea4db2b7a49bde9ef019f72796b8e",
+    "gesture_recognizer.task": "97952348cf6a6a4915c2ea1496b4b37ebabc50cbbf80571435643c455f2b0482",
 }
 
 MODES = ("dragonball", "normal", "naruto")
@@ -290,12 +296,23 @@ def send_virtual_frame(camera, frame: np.ndarray) -> None:
     camera.send(np.ascontiguousarray(frame))
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def download_models(mode: str = "normal") -> None:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     for destination, url in MODEL_URLS.items():
         if mode != "normal" and destination == GESTURE_MODEL:
             continue
-        if destination.exists() and destination.stat().st_size > 100_000:
+        expected = MODEL_SHA256.get(destination.name)
+        if destination.exists() and (
+            file_sha256(destination) == expected if expected else destination.stat().st_size > 100_000
+        ):
             continue
 
         temporary = destination.with_suffix(destination.suffix + ".part")
@@ -315,13 +332,21 @@ def download_models(mode: str = "normal") -> None:
                             percent = int(received * 100 / total)
                             print(f"\r  {percent:3d}%", end="", flush=True)
             print()
-            os.replace(temporary, destination)
+            if total and received != total:
+                raise OSError(f"descarga incompleta ({received} de {total} bytes)")
         except (OSError, urllib.error.URLError) as error:
             temporary.unlink(missing_ok=True)
             raise RuntimeError(
                 "No pude descargar los modelos de MediaPipe. "
                 "Revisá la conexión a internet y probá de nuevo."
             ) from error
+        if expected and file_sha256(temporary) != expected:
+            temporary.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"El modelo descargado {destination.name} no es el esperado (el hash no coincide). "
+                "No lo uso. Si Google publicó una versión nueva, hay que actualizar MODEL_SHA256."
+            )
+        os.replace(temporary, destination)
 
 
 def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCapture:
@@ -344,11 +369,17 @@ def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCa
             capture = cv2.VideoCapture(index)
         # In YUYV molte webcam USB scendono a 5-10 FPS sopra il 640x480.
         capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+    elif system == "Darwin":
+        capture = cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
     else:
         capture = cv2.VideoCapture(index)
 
     if not capture.isOpened():
-        hint = "listá las webcams con 'v4l2-ctl --list-devices'" if system == "Linux" else "probá con --camera 1"
+        hint = {
+            "Linux": "listá las webcams con 'v4l2-ctl --list-devices'",
+            "Darwin": ("dale permiso de cámara a la Terminal en Ajustes del Sistema → "
+                       "Privacidad y seguridad → Cámara, o probá con --camera 1"),
+        }.get(system, "probá con --camera 1")
         raise RuntimeError(
             f"La webcam {index} no está disponible. Cerrá las otras apps que la usen o {hint}."
         )

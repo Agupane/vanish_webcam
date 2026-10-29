@@ -9,6 +9,8 @@ CAM_LABEL="VanishCam"
 CAM_NR=10
 # Versión oficial que se compila si la de Ubuntu no anda con el kernel instalado.
 V4L2LOOPBACK_VERSION=0.13.2
+# Commit del tag v0.13.2: si el tag se moviera, no se compila (es código que corre en el kernel).
+V4L2LOOPBACK_COMMIT=2d44c2f3a33844dfd9928dc536288283289bbc34
 
 say() { printf '\n[VanishCam] %s\n' "$*"; }
 
@@ -33,6 +35,11 @@ build_v4l2loopback_from_source() {
   sudo apt-get remove -y v4l2loopback-dkms 2>/dev/null || true
   tmp="$(mktemp -d)"
   git clone -q --depth 1 --branch "v$version" https://github.com/umlaeute/v4l2loopback.git "$tmp/src"
+  if [[ "$(git -C "$tmp/src" rev-parse HEAD)" != "$V4L2LOOPBACK_COMMIT" ]]; then
+    rm -rf "$tmp"
+    echo "[VanishCam] El código de v4l2loopback v$version no coincide con el commit esperado. No lo compilo." >&2
+    exit 1
+  fi
   sed -i "s/^PACKAGE_VERSION=.*/PACKAGE_VERSION=\"$version\"/" "$tmp/src/dkms.conf"
   sudo dkms remove -m v4l2loopback -v "$version" --all 2>/dev/null || true
   sudo rm -rf "/usr/src/v4l2loopback-$version"
@@ -54,6 +61,9 @@ echo "options v4l2loopback devices=1 video_nr=$CAM_NR card_label=\"$CAM_LABEL\" 
   | sudo tee /etc/modprobe.d/vanishcam.conf >/dev/null
 if ! [[ -e /sys/devices/virtual/video4linux/video$CAM_NR ]]; then
   # Si ya estaba cargado con otras opciones, se recarga con las nuestras.
+  if lsmod | grep -q '^v4l2loopback'; then
+    say "Recargo v4l2loopback: si OBS u otra app usaba una cámara virtual, cerrala antes."
+  fi
   sudo modprobe -r v4l2loopback 2>/dev/null || true
   if ! sudo modprobe v4l2loopback; then
     cat >&2 <<'EOF'
@@ -81,7 +91,7 @@ cat > "$HOME/.local/share/applications/vanishcam.desktop" <<EOF
 Type=Application
 Name=VanishCam
 Comment=Efectos de desaparición para la webcam (Zoom, Meet)
-Exec=$APP_DIR/vanishcam.sh
+Exec="$APP_DIR/vanishcam.sh"
 Icon=camera-web
 Terminal=true
 Categories=AudioVideo;Video;
