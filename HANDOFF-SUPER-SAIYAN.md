@@ -120,12 +120,69 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
 - [ ] E5.2 `install.sh` end to end on a real Mac, OBS virtual camera, Meet test.
 - [ ] E5.3 Audio: watch for the duplicate SDL2 crash (HANDOFF.md §1). E5.4 `.app` build (`BUILD_MACOS.sh`).
 
+### E6 — Windows camera picker and a home window for all settings (IN PROGRESS, same branch)
+
+Owner request (2026-10-29): on Windows the camera picker must work like on Ubuntu, with real camera names, and all the
+setup (effect, camera, golden hair) must be done from a window, not from command-line flags. Everything stays on
+`feat/ssj-realism` so the owner can test it all together. Today on Windows there is **no picker**: `open_camera` only
+lists cameras on Linux (`find_linux_cameras`), so Windows always opens index 0 unless `--camera N`; `--list-cameras` is
+Linux-only. Trap: **OBS Virtual Camera is a DirectShow camera too**; if VanishCam opens it, it reads its own output.
+
+- [x] **E6.1 Dependency.** `pygrabber==0.2; sys_platform == "win32"` (MIT; pulls `comtypes` 1.4.17, MIT) in
+  `requirements.txt`; lock regenerated with `--python-version 3.10` (without it uv drops the Python 3.10 variants
+  and breaks Ubuntu 22.04). Only `pygrabber` and `comtypes` were added to the lock. *Still to do:* add both to
+  NOTICE.md (third-party licenses) and CHANGELOG.
+- [ ] **E6.2 Camera discovery for every OS** in `vanish_cam.py`:
+  - `windows_camera_names()`: `from pygrabber.dshow_graph import FilterGraph; FilterGraph().get_input_devices()`
+    inside `try/except Exception` → `None` on failure (FilterGraph also creates a Windows Media profile manager, which
+    may be missing on Windows "N" editions). The list is in DirectShow order = the index OpenCV uses with
+    `cv2.CAP_DSHOW` (which `_open_capture` already tries first).
+  - `find_windows_cameras(names=None, probe=None) -> list[(index, label)]`: drop virtual cameras by name
+    (case-insensitive: "virtual", "obs", "unity video capture", "vanishcam"); if `names` is `None`, probe indices 0–4
+    with `_open_capture` and label them "Camera N".
+  - `find_cameras(system)`: Linux → `[(device, linux_camera_label(device))]`; Windows → `find_windows_cameras()`;
+    macOS → `[]` for now (E5).
+  - `open_camera`: use `find_cameras`; >1 → `choose_camera_window`; 1 → that one (on Windows this skips OBS at index
+    0); none → 0. Put the real name in `info["label"]`.
+  - `choose_camera_window` and `render_camera_panel` take `[(source, label)]` instead of bare sources (only callers:
+    `open_camera`; no tests use them yet).
+  - Rename `list_linux_cameras` → `list_cameras` (callers: `open_camera` error path and `run` for `--list-cameras`)
+    and print `--camera N` hints for Windows too.
+  - *Check:* unit tests with fake names (`["OBS Virtual Camera", "Integrated Camera", "Logitech C920"]` → indices 1
+    and 2 with their names), probe fallback, and `open_camera` picking the only real camera.
+- [ ] **E6.3 Home window** (new module `home_ui.py`, OpenCV-drawn like `choose_mode`, ASCII text only):
+  - Sections: EFFECT (Dragon Ball / Normal / Naruto, keys 1–3), CAMERA (current name + "Change" → the picker;
+    hidden when only one camera), SUPER SAIYAN HAIR (Dragon Ball only: status "N pictures ready" / "not set up" /
+    last problem; buttons "Take photos", "Copy prompt", "Open folder", "Check pictures"), a message area (last 4
+    lines) and a big START button (Enter). Q/ESC or closing the window quits.
+  - `run_home(settings, actions)` returns the chosen settings or `None`; `actions` are callbacks from `vanish_cam`
+    (choose camera, take photos, copy prompt, open folder, check pictures) so the module stays testable.
+  - "Take photos" reuses `capture_hair_photos`, which must close only its own window (`cv2.destroyWindow`, not
+    `destroyAllWindows`) and return the saved paths instead of printing only. "Check pictures" runs
+    `ssj_face.load_hair_views` with a log collector and shows the messages in the window.
+  - Helpers: `copy_text(text) -> bool` (Windows `clip`, macOS `pbcopy`, Linux `wl-copy` / `xclip -selection clipboard`
+    / `xsel --clipboard --input`; the prompt is ASCII), `open_folder(path)` (Windows `os.startfile`, macOS `open`,
+    Linux `xdg-open`, non-blocking).
+  - Remember the last effect and camera **name** (indices can change) in `vanishcam_settings.json` in the app folder
+    (gitignore it).
+  - *Check:* unit tests for layout hit-testing, keys/mouse flow with patched `cv2` (pattern: `test_video_output.py`
+    and the `choose_mode` tests in `test_naruto_effect.py`), settings round trip, `copy_text` fallbacks.
+- [ ] **E6.4 Wire it.** New flag `--home`; `run()` shows the home window and then starts `run_camera` with the chosen
+  mode/camera. Launchers open the home window **when started without arguments**: `vanishcam.bat` (keep it pure
+  ASCII + CRLF) and `vanishcam.sh` (the Ubuntu menu entry and the Windows desktop shortcut call them without
+  arguments). Any explicit flag keeps today's behaviour.
+- [ ] **E6.5 Docs + gate.** README/GUIDE: "open VanishCam from the shortcut/menu, everything is in the window";
+  AGENTS layout + seams; CHANGELOG; NOTICE. *Owner gate on Windows:* the picker lists the real webcams by name
+  without OBS Virtual Camera, the home window works with the mouse, the hair flow can be done without the terminal.
+
 ### Resume on Windows (owner's machine, from 2026-10-29)
 
 The owner continues on Windows with a new Claude Code session (the claude-bcn session cannot run on their PC). State
 at handoff: branch `feat/ssj-realism`, everything committed and pushed, CI green on Ubuntu, Windows and macOS arm64.
-Done: E1.1–E1.7, E3.3, E4.0–E4.3. **Next: the owner gates E1.8 (aura) and E4.4 (hair, eyes, brows) on Windows**,
-then the same on Ubuntu, then merge (the owner merges) and E2.
+Done: E1.1–E1.7, E3.3, E4.0–E4.3, E6.1. **Next, in this order:** E6.2–E6.5 (camera picker with names + home window;
+best done on Windows, where `pygrabber` can be tested), then the owner gates E1.8 (aura), E4.4 (hair, eyes, brows)
+and E6.5 on Windows, then the same on Ubuntu, then merge (the owner merges) and E2. Until E6 is done, pick the
+webcam with `.\vanishcam.bat --camera N` (try 0, 1, 2…; avoid the index of OBS Virtual Camera).
 
 Setup in PowerShell (not as administrator), in a separate folder so an existing install is not touched:
 
@@ -167,6 +224,9 @@ charge. Tune in `super_saiyan_effect.py` (`AURA_TONES`, `AURA_RADIUS`, `FLAME_RI
   `ssj_face.py`; 111 tests pass on claude-bcn. Owner gates E1.8 and E4.4 can be done in the same session.
 - 2026-10-29: CI on `fbe2b51`: `ubuntu-latest` ✅, `windows-latest` ✅ and, this time, `macos-latest` (arm64) ✅ too:
   the runner was assigned, so the §0 issue looks intermittent (runner availability), not the code.
+- 2026-10-29: owner asked for the Windows camera picker with names and a home window for all settings (E6). Done:
+  E6.1 (dependency + lock). **Next: E6.2–E6.5** — the owner continues from Windows, where the picker can be tested
+  for real (`pygrabber` only works there). On Windows, rerun `install.ps1` after `git pull` because the lock changed.
 
 ## 0. Start here
 

@@ -1,5 +1,5 @@
 # Human-edited ranges. The installers use requirements.lock.txt (pinned, with hashes):
-#   uv pip compile requirements.txt --universal --generate-hashes -o requirements.lock.txt
+#   uv pip compile requirements.txt --universal --generate-hashes --python-version 3.10 -o requirements.lock.txt
 # Regenerate the lock whenever this file changes.
 # Intel Macs: MediaPipe 1.x no longer ships macOS x86_64 wheels, so they use the
 # last release that does (and numpy/OpenCV versions compatible with it).
@@ -17,3 +17,5 @@ jax==0.4.38; sys_platform == "darwin" and platform_machine == "x86_64"
 jaxlib==0.4.38; sys_platform == "darwin" and platform_machine == "x86_64"
 pyvirtualcam>=0.15,<1
 pygame>=2.6,<3
+# Windows only: webcam names in DirectShow order (the camera picker; hides OBS Virtual Camera).
+pygrabber==0.2; sys_platform == "win32"
