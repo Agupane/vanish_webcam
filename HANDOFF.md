@@ -1,6 +1,7 @@
 # Handoff — what is left to fix and finish
 
-State as of 2026-10-29, after the procedural-aura refactor (main). Read `AGENTS.md` first: layout,
+State as of 2026-10-29, after the procedural-aura refactor (main). Next work on Super Saiyan realism and CPU
+performance: [HANDOFF-SUPER-SAIYAN.md](HANDOFF-SUPER-SAIYAN.md). Read `AGENTS.md` first: layout,
 loop phases, rules and testable seams. [ALGORITHMS.md](ALGORITHMS.md) has the algorithm inventory, measured costs and
 the optimization backlog.
 

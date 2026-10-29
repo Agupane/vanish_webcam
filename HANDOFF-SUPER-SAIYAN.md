@@ -1,0 +1,231 @@
+# Handoff — Super Saiyan realism and real-time CPU performance
+
+Written 2026-10-29 for the next coding agent. This is an **evaluation and plan**: nothing in it has been implemented
+yet. Read [AGENTS.md](AGENTS.md) (rules, layout, testable seams), [ALGORITHMS.md](ALGORITHMS.md) (measured costs) and
+[HANDOFF.md](HANDOFF.md) (general status) first. Keep everything you write in the repo in English.
+
+## 0. Start here
+
+- Repo: `Agupane/vanish_webcam`, branch `main`. Local clone: `/root/work/repos/vanish_webcam` on claude-bcn,
+  `/workspace/vanish_webcam` in OpenCode.
+- Tests: `.venv/bin/python -m unittest discover -p 'test_*.py'` (Linux needs `libegl1 libgles2`).
+- MediaPipe crashes in headless containers without GPU/display (`malloc(): unaligned tcache chunk`); that is the
+  environment. Pure NumPy/OpenCV code (the aura, the state machine) can be tested anywhere; anything that runs a
+  MediaPipe task must be verified in CI or on the owner's machine.
+- **CI is red, but not because of the code:** since `b4e91c8` every run has `test (macos-latest)` *cancelled after 15
+  minutes with no runner assigned* (no steps ran). Ubuntu, Windows and macOS Intel are green. Likely macOS minutes or
+  runner availability on the account; the owner has to check GitHub billing. Do not "fix" it in the workflow without
+  asking. HANDOFF.md still says the matrix is green: correct it once the cause is known.
+- The owner confirmed on 2026-10-29 that **the Super Saiyan gesture works well**. Do not change the pose detection
+  (`charge_pose`, `hand_tension`, thresholds) unless a change below requires it, and then re-verify with the owner.
+- Commit in small steps, keep the 87+ tests green, add tests for every new pure function, update CHANGELOG.md
+  (*Unreleased*) and NOTICE.md (new models/assets), and update ALGORITHMS.md with new measured costs.
+
+## 1. What the owner sees today (screenshot of a Google Meet call, 2026-10-29)
+
+The owner sent a photo of the screen during a Meet call with the aura on. Observations:
+
+1. **Meet's background blur was on.** Meet segments the person and blurs everything else, so it smeared the aura
+   (which lives outside the person) into a soft haze. Parts of the aura near the body were kept sharp, others were
+   blurred: the result looks like dirty lens flare. Any aura design must assume the call app's background effects are
+   **off**; the README/GUIDE and the status panel must tell the user to turn off background blur/replacement in
+   Meet/Zoom/Teams while using VanishCam.
+2. **Washed out on a bright wall.** The background is a light grey/white wall. The additive glow saturates to white
+   and has almost no contrast; it reads as overexposure, not as an energy aura.
+3. **Shapeless, very wide halo.** A large soft yellow cloud spreads far above and left of the head (about one head
+   width or more). There are no flame tongues, no defined edge and no bright rim hugging the body.
+4. **Asymmetric flames.** The only fire-like part is a cluster of orange/yellow flames on one side, next to the arm and
+   the torso. The rest of the outline has almost nothing. Investigate why (candidates: the vertical `rising` filter and
+   the bbox crop margins `-70/-170/+70/+15` in `AuraRenderer.render`; the mask shape between arm and torso; the chair
+   being part of the mask; the preview/output mirror). Reproduce with a synthetic mask first.
+5. **The chair is part of the silhouette.** The owner sits in a high-back gaming chair; the person segmenter treats
+   the chair as "person", so the aura wraps the chair instead of the body.
+6. **Nothing changes on the person.** Same hair, same eyes, no light on the skin. It looks like a filter on the
+   background, not a transformation.
+
+Do not commit the screenshot: it shows the owner's face and the repo is public.
+
+## 2. How the Super Saiyan effect works now
+
+File `super_saiyan_effect.py`, called from `vanish_cam.run_camera` (search `ssj.render_super_saiyan`).
+
+- **Pose:** both clenched fists in front of the face, held 1.5 s (`charge_pose`, `hand_tension`). Reuses the Dragon
+  Ball hand + face landmarker result (`power_active`), no extra model.
+- **State machine:** `PowerState`: `off → charging → flash → super → powering_down`; `PowerLevels` gives aura
+  intensity, flash, shake and radius per phase.
+- **Mask:** `vanish_cam.person_mask` (MediaPipe `selfie_segmenter_landscape`, 256×144 model output, blurred at model
+  resolution and upscaled), refreshed every **0.1 s** during the transformation (`update_mask(0.1)`).
+- **Aura (`AuraRenderer.render`), every output frame:**
+  1. crop the mask bbox with margins, downscale to half resolution (`AURA_SCALE = 0.5`);
+  2. outside distance transform → ring `exp(-d / AURA_RADIUS)` (`AURA_RADIUS = 22`, pulsing ±15 % at 3 Hz);
+  3. "rising flames": vertical `filter2D` with a 26-row kernel, `max(ring, rising * 1.3)`;
+  4. multiply by a 256×256 value-noise texture scrolled upward (one rigid texture for the whole aura);
+  5. map through `AURA_LUT` (black → orange → yellow → near white), 30 sparks of 1–2 px along the contour;
+  6. zero inside the person (`glow *= 1 - person`), upscale, **add** to the frame (float32).
+- **Flash:** whitening on transform; **shake:** `warpAffine` with random offset; sounds synthesized or
+  `assets/ssj_*.mp3`.
+- History: a GIF aura and a golden-hair/spiky-crest pipeline (multiclass hair segmentation) were removed in `ffb1ef5`
+  because they painted the person and looked wrong. Do not bring them back as they were.
+
+## 3. Visual goal and gap
+
+| In the series | Today |
+|---|---|
+| Aura with sharp, flame-like tongues rising upward, cel-shaded with 2–3 flat tones and a bright white/yellow inner rim hugging the body | Soft additive gradient; the scrolling noise reads as a texture sliding, not as flames |
+| Golden spiky hair — the main signifier | None (removed) |
+| Teal/green irises, golden eyebrows | None |
+| The aura **lights the character**: yellow rim light on face/body, darker, more contrasted surroundings | The person is never touched; on light walls the glow disappears or washes out |
+| Lightning (SSJ2), dust and pebbles floating up, camera shake, flash | Shake and flash exist; 30 tiny sparks |
+
+## 4. Visual plan (in order; each step is shippable on its own)
+
+### 4.1 Fix the foundations
+
+- **Better silhouette using the calibrated background.** VanishCam already captures a clean background plate during
+  setup. The chair is static, so it is in the plate. Person mask = `segmenter_mask ∧ (|frame − background| > threshold)`
+  (difference computed at low resolution, morphological close, temporal smoothing). This removes the chair and other
+  static furniture. Fall back to the plain segmenter mask when the background is stale (camera moved, lighting
+  changed: high difference everywhere).
+- **Temporal stability:** exponential moving average of the mask between updates; 15–20 Hz during the transformation
+  (the segmenter is cheap, ~6 ms) so the aura does not lag when the owner moves.
+- **Never paint with a stale mask:** when the mask is older than the frame, dilate the "keep out" zone a little.
+- **Blend that survives light backgrounds:** darken and slightly desaturate the background outside the person while
+  transformed (−15 to −25 %, plus a vignette), then use a screen blend (or additive capped per channel) for the aura.
+  The series darkens the surroundings; this is what gives the aura contrast.
+- **Docs:** tell users to disable Meet/Zoom/Teams background blur/replacement (README, GUIDE, status panel hint while
+  transformed). Optionally detect nothing — we cannot see the call app — just document it.
+
+### 4.2 Light the person (biggest realism gain per effort)
+
+- **Rim light:** inside distance transform of the person mask; add warm yellow light in a band of ~6–15 px inside
+  the silhouette edge, stronger on top (light comes from the aura around). This is lighting, not painting: it must keep
+  the person's texture (multiply/screen at 20–35 %, not opaque color).
+- **Warm tint on the face/upper body** at low opacity, pulsing with the aura.
+- **Eyes:** FaceLandmarker returns 478 points including the irises (468–477). Tint the iris disc teal/green with a
+  luminance-preserving blend; optional golden eyebrows (eyebrow landmarks + small dilated mask).
+
+### 4.3 Cel-shaded flame aura mapped to the silhouette
+
+Two options; the second is the recommendation.
+
+- **Procedural flames:** emit flame polygons from contour points, bent upward, length modulated by animated noise and
+  by the contour normal's vertical component (longer on top and shoulders, short at the bottom); fill with 2–3 flat
+  tones + white inner rim; slight blur. Cheap, no assets.
+- **Pre-generated flame strip mapped along the contour (recommended):**
+  1. Offline, produce a **horizontally tileable, looping flame strip** with alpha (e.g. 24 frames of 1024×256 RGBA,
+     anime cel-shaded, flames pointing "up" = away from the body).
+  2. Per mask update (10–20 Hz), at half resolution: `cv2.distanceTransformWithLabels(outside, DIST_L2, 3,
+     labelType=DIST_LABEL_PIXEL)` gives, for every outside pixel, its distance `d` to the silhouette and the label of
+     the nearest contour pixel. Order the contour pixels by arc length so each label maps to `s` (position along the
+     outline). Build `map_x = s * strip_width / perimeter` (wrapping) and `map_y = d * strip_height / max_thickness`,
+     plus an upward shear term so flames lean up regardless of the normal.
+  3. Per output frame: `cv2.remap` the current strip frame with those maps (~1–2 ms at half resolution), mask out the
+     person, composite.
+  The aura then follows any pose and can never enter the person — the problem that killed the GIF.
+- **Asset generation:** image/video models (Veo, Kling, Runway, Flux…) are good for style references and key frames
+  but bad at seamless loops and alpha; if used, generate on pure black and derive alpha from luminance. The most
+  reliable way to get looping, tileable flames with real alpha is a **fire simulation** (EmberGen or Blender
+  Mantaflow) rendered with a toon/posterize shader into 2–3 flat tones. Store the result in `assets/` as a PNG/WebP
+  sprite sheet; keep it small (< 3 MB).
+- Extra pre-generated assets with the same technique: transformation burst (flipbook), lightning bolts (SSJ2 variant),
+  floating dust/pebbles.
+- **Licensing:** assets must be original (simulated or generated by us), never frames cut from the anime (see
+  AGENTS.md rules). List every new asset and its origin in NOTICE.md.
+
+### 4.4 Golden hair (optional, opt-in)
+
+- Baseline (local, no network): recolor the user's own hair to gold with a luminance-preserving LUT, using the hair
+  class of the MediaPipe multiclass selfie segmenter, run only while transformed and at low rate (5 Hz). Add spikes as
+  a sprite anchored to the face landmarks (forehead top `10`, face width `234/454`, roll from the eye line), drawn
+  behind the head where the mask allows.
+- Personalised hair (opt-in, needs network or a local GPU **once**): during setup take one photo, ask an image-edit
+  model for "this person as Super Saiyan", segment the hair of the generated image, and at runtime warp that hair
+  layer onto the head with a similarity transform from the face landmarks. Generate front and two three-quarter
+  views to survive head turns. This breaks the "nothing leaves your computer" promise: it must be explicitly opt-in,
+  documented, and off by default. **Ask the owner before adding any network call** (AGENTS.md: no network connections
+  other than model downloads).
+- Not recommended: real-time full-frame AI stylization (StreamDiffusion & co.) — needs a strong GPU, flickers, does
+  not run on a laptop CPU.
+
+### 4.5 Acceptance for the visual work
+
+- Synthetic-mask tests: the aura never writes inside the person mask; the rim light never changes pixels outside a
+  band inside the edge; the result is deterministic for a fixed `t`.
+- Owner review on a real call (Meet, background effects off), light wall and dark room. Ask for a screenshot.
+
+## 5. Performance: diagnosis
+
+Budget at 30 FPS: **33 ms per frame**. Everything runs **serially in one thread**: capture → hand+face detection →
+segmentation → effect → preview → virtual camera.
+
+| Step | Cost (ALGORITHMS.md, blank frames) | Rate | CPU |
+|---|---|---|---|
+| Hand + face landmarkers | ~30.5 ms | 12.5 Hz | ~38 % of a core, always, even when idle |
+| Aura | ~11–13.6 ms | **every frame** (30 Hz) | ~40 % of a core |
+| Person segmenter | ~6 ms | 10 Hz | ~6 % |
+| Capture/decode, color conversion, preview, virtual cam | not measured (estimate 5–8 ms) | every frame | estimate 15–25 % |
+
+Problems:
+
+1. **Jank:** on frames where detection runs, detection + aura + the rest ≈ 50 ms > 33 ms, so a frame is lost about every
+   80 ms. Average FPS can look fine while motion stutters.
+2. **Wasted work:** the aura recomputes its whole geometry 30 times per second although its input mask changes 10 times
+   per second; detection runs at full rate when nobody is gesturing.
+3. **Measurements are on blank frames**, where the palm detector behaves differently from a real person. They are a
+   lower bound.
+
+**Language:** Python is fine. MediaPipe and OpenCV are native and release the GIL; Python glue is not the bottleneck.
+Do not rewrite in C++/Rust. Later, optional: a small native extension for the aura pixel maths if profiling still
+shows it, or running the same models through OpenVINO/ONNX Runtime with int8 weights for thread control.
+
+## 6. Performance plan (in order)
+
+0. **Benchmark harness first.** Add `--input-video PATH` (read frames from a file instead of the camera; no writing to
+   disk, see AGENTS.md) and a `--bench` mode that prints per-stage p50/p95 times and process CPU % over N frames.
+   The owner records a short clip themselves (idle, teleport, charge, transformed, moving). Add a CI check on a tiny
+   synthetic clip that fails on large regressions of the pure-Python/OpenCV stages.
+1. **Threads instead of a serial loop.**
+   - Capture thread keeps only the latest frame (drop stale ones).
+   - Inference in the background with MediaPipe `RunningMode.LIVE_STREAM` + `detect_async`/`segment_async` and
+     result callbacks; the render loop never waits for a model and uses the latest result. Keep timestamps strictly
+     increasing per task. Keep the patchable seams in AGENTS.md working (tests drive the loop with a fake clock).
+   - Expected: steady 30 FPS; 30–60 ms extra detection latency, invisible for gestures held 1–1.5 s.
+2. **Activity-adaptive detection** (biggest saving in a normal call).
+   - No hands seen: detect at 4–5 Hz; hand present: 12–15 Hz; during a hold: full rate.
+   - Cheap motion gate before that: abs diff of 64×36 grayscale thumbnails; no motion → skip the model.
+   - Face landmarker only when a hand is near the head; otherwise reuse the last face (already done for the charge).
+     The teleport still needs a fresh face when the fingers reach the forehead.
+   - Expected idle CPU for detection: ~38 % → ~10 % of a core (estimate).
+3. **Aura: compute geometry per mask update, not per frame.**
+   - Cache distance transform, ring, rising field, contour/edge points and (later) the remap maps; per frame only scroll
+     the noise / pick the strip frame, color and blend.
+   - uint8 maths: `cv2.LUT`, saturating `cv2.add`/screen blend; avoid full-ROI float32 arrays; precompute the noise at
+     the max size and crop instead of resizing every frame.
+   - Expected: ~11 ms → 3–4 ms per frame (estimate). Keep `test_fast_enough_for_live_video`.
+4. **Prototype a single-model cascade** (only after 0–3, behind a flag): `pose_landmarker_lite` gives wrists, rough
+   fingers, nose and eyes **and** a segmentation mask in one pass. It could replace the segmenter and act as the first
+   stage; run the fine hand landmarker only on a crop around the head when wrists are near it. This touches the
+   gesture detection that works today: compare on the owner's recorded clip before adopting.
+5. **Smaller items:** preview window at 15 FPS (virtual camera stays at 30); make sure the camera delivers the working
+   resolution directly (no 1080p decode + resize); `apply_dissolve` to uint8 and ROI-only; vectorize or cache
+   `speed_lines`.
+
+Expected outcome of 1–3 (estimate, to confirm with the harness on the owner's machine): transformed from >1 core with
+jank to ~0.4–0.5 core at a steady 30 FPS; idle ~0.15 core.
+
+## 7. Suggested order of work
+
+1. Benchmark harness (§6.0) — needed to judge everything else.
+2. Threads + adaptive detection (§6.1–6.2).
+3. Aura caching + uint8 (§6.3), together with the foundations of §4.1 (background-difference mask, temporal smoothing,
+   darkened background, docs about call-app background blur).
+4. Rim light + eyes (§4.2). Ask the owner for a screenshot on a real call.
+5. Flame strip asset + contour mapping (§4.3).
+6. Hair (§4.4), only with the owner's OK for the opt-in part.
+
+## 8. Stop and ask the owner when
+
+- a change would alter the gesture thresholds or how the poses are detected;
+- you want to add any network call, a new model download, or a new dependency (license check, NOTICE.md, lock file);
+- you need hardware verification (real camera, Meet/Zoom, Windows/macOS);
+- you want to touch the CI matrix or GitHub settings (macOS arm64 runner issue).
