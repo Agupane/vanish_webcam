@@ -18,6 +18,7 @@ Algorithm inventory, measured costs, hot spots and the optimization backlog: [AL
 | `naruto_effect.py` | Naruto mode: joined palms, smoke + falling log, reverse effect to reappear |
 | `super_saiyan_effect.py` | Super Saiyan (inside Dragon Ball): charge-ki pose, `PowerState`, procedural `AuraRenderer` (surrounds the silhouette, never paints the person), synthesized sounds |
 | `vanish_sound.py` | Plays an effect sound (pygame, or `ffplay` fallback); `play(loops, fade_ms)`, `stop(fade_ms)`, `set_volume` |
+| `ssj_face.py` | Super Saiyan face: teal irises, golden brows, import of the user's golden hair pictures (`ssj_hair/ssj_*.png`) and `HairOverlay`, which fits the hair on the live face |
 | `tools/aura_preview.py` | Renders the Super Saiyan aura on a synthetic scene (light/dark wall, chair) for tuning without a camera |
 | `test_*.py` | unittest suite; `run_loop()` in `test_video_output.py` drives the real loop with a fake clock |
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
@@ -71,7 +72,9 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
 - MediaPipe VIDEO-mode tasks need strictly increasing timestamps: run each task at most once per frame.
 - Keep the loop testable: patchable seams are `gesture_active`, `person_mask`, `person_in_frame`, `create_tasks`,
   `open_camera`, `open_virtual_camera`, `VanishSound`, `teleport_sound_path`, `power_active`, `ssj_sound_paths`,
-  `draw_setup_marks`, `render_status_panel` and `compose_dashboard`.
+  `load_hair`, `detect_face_points`, `draw_setup_marks`, `render_status_panel` and `compose_dashboard`.
+- The Super Saiyan hair is never generated or downloaded by VanishCam: the user makes it with an image tool of their
+  choice from photos taken with `--ssj-hair-photos` (owner decision, 2026-10-29). Do not add calls to image APIs.
 - Super Saiyan sounds are synthesized too (`write_charge_sound`, `write_transform_sound`, `write_aura_hum`);
   `assets/ssj_charge.*`, `assets/ssj_transform.*` and `assets/ssj_aura.*` override them.
 
@@ -113,4 +116,6 @@ On a headless Linux box MediaPipe needs `libegl1` (`sudo apt install libegl1`), 
 
 - Downloaded models are checked against `MODEL_SHA256` before use; add the hash when adding a model.
 - The v4l2loopback source built by `install-ubuntu.sh` is pinned to a commit (`V4L2LOOPBACK_COMMIT`).
-- Never write frames to disk or open network connections other than the model downloads.
+- Never write frames to disk or open network connections other than the model downloads. The only exceptions are the
+  photos the user takes on purpose with `--ssj-hair-photos` and the hair cut-outs cached in `ssj_hair/.cache/`;
+  `ssj_hair/` is gitignored.

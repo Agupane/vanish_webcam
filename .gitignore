@@ -5,6 +5,8 @@ __pycache__/
 .venv-local/
 .venv-build/
 models/
+# The user's photos and Super Saiyan pictures: personal, never committed.
+ssj_hair/
 *.part
 build/
 dist/

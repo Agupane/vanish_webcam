@@ -299,7 +299,7 @@ class PowerStateTests(unittest.TestCase):
         self.assertGreater(power.levels(2.6).radius, 1.5)
         power.update(2.5 + ssj.FLASH_SECONDS + 0.01, None)
         self.assertEqual(power.phase, "super")
-        self.assertEqual(power.levels(4.0), ssj.PowerLevels(aura=1.0))
+        self.assertEqual(power.levels(4.0), ssj.PowerLevels(aura=1.0, hair=1.0))
         power.power_down(5.0)
         self.assertLess(power.levels(5.3).aura, 1.0)
         power.update(5.0 + ssj.POWER_DOWN_SECONDS + 0.01, None)

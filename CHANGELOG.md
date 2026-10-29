@@ -16,6 +16,13 @@ All notable changes to this fork are documented here. The format is based on
 
 ### Added
 
+- Super Saiyan face: teal irises and golden eyebrows while transformed (face landmarks; whites, lids and skin
+  untouched), and the user's own golden hair. `--ssj-hair-photos` takes guided photos (front and both sides) into the
+  gitignored `ssj_hair/` folder and prints a prompt; the user turns them into Super Saiyan pictures with ChatGPT,
+  Gemini or any image tool and saves them as `ssj_hair/ssj_*.png`. At startup the golden hair is cut out (Lab color
+  test, face landmarks), cached in `ssj_hair/.cache/`, and fitted on the live face with a similarity transform, picking
+  the picture closest to the head turn. The hair and eyes flicker in late in the charge. VanishCam itself still opens
+  no network connections (`ssj_face.py`).
 - `LICENSE` (MIT, for this fork's contributions), `NOTICE.md` (upstream code and third-party licenses),
   `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `SECURITY.md`, `.editorconfig`, issue and pull
   request templates, and an "About this fork" section in the README.

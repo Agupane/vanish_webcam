@@ -63,6 +63,13 @@ A stray single-frame gesture no longer makes you vanish, and after each effect y
   silhouette; inside it there is only a thin band of light along the edge. The background photo from the setup is used
   to drop static furniture the person detector confuses with you (a high-back chair), so take it with the chair in
   place. The first version used a GIF and golden-hair recolor; both were removed because they looked wrong.
+- **Eyes and eyebrows:** while transformed your irises turn teal and your eyebrows golden, using the face landmarks;
+  the whites of the eyes, the lids and the skin are left alone.
+- **Golden hair:** made once from your own photos (`--ssj-hair-photos`, then an image tool of your choice, then save
+  the results as `ssj_hair/ssj_*.png`; the README has the steps). At startup VanishCam cuts the golden hair out of each
+  picture and caches it in `ssj_hair/.cache/`; while transformed it fits the hair on your head (position, size and tilt)
+  and picks the picture closest to where you are looking. To redo it, replace the picture: the cache notices. If the
+  terminal says "No golden hair found", ask the image tool for brighter, clearly yellow hair on a plain gray background.
 - **Your own sounds:** put `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` or `assets/ssj_aura.MP3` (also `.mp3`,
   `.wav`, `.ogg`, `.m4a` or `.flac`) and those are used instead of the generated ones. Dragon Ball uses
   `assets/teleport.mp3`.

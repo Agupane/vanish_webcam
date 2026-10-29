@@ -132,9 +132,24 @@ On Windows, run `install.ps1` again.
 ### Super Saiyan (Dragon Ball mode)
 
 Hold **both clenched fists in front of your face, one on each side of the nose**, for 1.5 seconds. A golden aura with
-rising flames and sparks surrounds your silhouette, the room gets darker and the edge of your body catches the light
-(your hair and clothes are not recolored); the image shakes and a hum plays. Repeat the pose or press `S` to power
-down. Teleporting while transformed keeps the transformation.
+rising flames and sparks surrounds your silhouette, the room gets darker and the edge of your body catches the light;
+your eyes turn teal, your eyebrows golden and, if you added it, your hair turns into golden spiky Super Saiyan hair
+(it flickers in during the charge, like in the series). The image shakes and a hum plays. Repeat the pose or press `S`
+to power down. Teleporting while transformed keeps the transformation.
+
+**Golden hair (optional, once):** VanishCam does not draw the hair itself: you make it from your own photos with an
+image tool you choose, and VanishCam never uploads anything.
+
+1. Run `./vanishcam.sh --ssj-hair-photos` (Windows: `vanishcam.bat --ssj-hair-photos`). It takes three photos (front
+   and a little turned to each side; `SPACE` take, `S` skip, `Q` quit), saves them in the `ssj_hair` folder of the app
+   and prints a prompt (also saved as `ssj_hair/prompt.txt`).
+2. In ChatGPT or Gemini (the free versions work), attach a photo and paste the prompt.
+3. Save the result in `ssj_hair` as `ssj_front.png` (and `ssj_left.png`, `ssj_right.png` for the other photos, so the
+   hair follows your head when you turn it). Start VanishCam: the hair is imported automatically.
+
+The picture must show the whole face and clearly golden hair on a plain background; if not, the terminal says why.
+Your photos stay in `ssj_hair` until you delete them; uploading them to an image tool is your choice and follows that
+tool's terms.
 
 **Turn off background blur and virtual backgrounds in Zoom, Google Meet or Teams** while you use VanishCam. Those
 features blur or replace everything that is not you, and the aura lives exactly there: with them on it turns into a
@@ -175,7 +190,7 @@ To list the exact device names, run this in the app folder (`.venv/bin/python` o
 
 ## Security and privacy
 
-- Video is processed only on your computer; VanishCam doesn't save images or open network connections, except for the first download of the Google MediaPipe models, which is verified with SHA-256.
+- Video is processed only on your computer; VanishCam doesn't save images or open network connections, except for the first download of the Google MediaPipe models, which is verified with SHA-256. The only images it writes are the photos you take on purpose with `--ssj-hair-photos` (in `ssj_hair/`) and the hair cut-outs it makes from your Super Saiyan pictures (`ssj_hair/.cache/`).
 - On Linux, if the virtual camera has to be built, the installer verifies the exact source commit before building it.
 - The one-line installers (`curl | bash`, `irm | iex`) run whatever is on this repo's `main` branch by default: if you prefer, clone the repo, review the scripts and run them by hand. Both accept `VANISHCAM_REF` (a tag or commit, e.g. `VANISHCAM_REF=v1.0.0`) to install an exact version and use a pinned uv installer whose SHA-256 is verified before running it.
 - Dependencies install from `requirements.lock.txt`, pinned with hashes (`--require-hashes`).

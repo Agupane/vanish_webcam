@@ -71,6 +71,7 @@ def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
         mocks.enter_context(patch.object(app, "VanishSound", side_effect=new_sound))
         mocks.enter_context(patch.object(app, "teleport_sound_path", return_value="teleport.wav"))
         mocks.enter_context(patch.object(app, "ssj_sound_paths", return_value=("c.wav", "t.wav", "h.wav")))
+        mocks.enter_context(patch.object(app, "load_hair", return_value=None))
         mocks.enter_context(patch.object(app, "draw_setup_marks", side_effect=lambda frame, mask: frame))
         mocks.enter_context(patch.object(
             app, "render_status_panel",

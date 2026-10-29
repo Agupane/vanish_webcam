@@ -24,6 +24,7 @@ from mediapipe.tasks.python import vision
 
 try:
     from . import dragonball_effect as dragonball
+    from . import ssj_face
     from . import super_saiyan_effect as ssj
     from .naruto_effect import (
         EFFECT_SECONDS, REAPPEAR_SECONDS, joined_hands_from_landmarks, landed_log_anchor,
@@ -32,6 +33,7 @@ try:
     from .vanish_sound import SOUND_PATH, VanishSound
 except ImportError:
     import dragonball_effect as dragonball
+    import ssj_face
     import super_saiyan_effect as ssj
     from naruto_effect import (
         EFFECT_SECONDS, REAPPEAR_SECONDS, joined_hands_from_landmarks, landed_log_anchor,
@@ -42,6 +44,8 @@ except ImportError:
 
 APP_DIR = Path(__file__).resolve().parent
 MODEL_DIR = APP_DIR / "models"
+# Super Saiyan hair: the user's photos and the golden versions they made with an image model (gitignored).
+HAIR_DIR = APP_DIR / "ssj_hair"
 WINDOW_NAME = "VanishCam - Preview"
 CAMERA_WINDOW = "VanishCam - Choose camera"
 PANEL_WIDTH = 380
@@ -256,6 +260,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--gesture-debug", action="store_true",
         help="Print the detected gesture in the terminal (no text on the video)",
+    )
+    parser.add_argument(
+        "--ssj-hair-photos", action="store_true",
+        help="Take the photos for the Super Saiyan hair (saved in ssj_hair/, never uploaded) and print what to do next",
     )
     parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
@@ -1178,6 +1186,90 @@ def self_test() -> int:
     return 0
 
 
+def detect_face_points(image: np.ndarray) -> np.ndarray | None:
+    """Face landmarks in pixels on a still picture (an imported Super Saiyan image)."""
+    options = vision.FaceLandmarkerOptions(
+        base_options=base_options(FACE_MODEL), running_mode=vision.RunningMode.IMAGE, num_faces=1,
+    )
+    landmarker = vision.FaceLandmarker.create_from_options(options)
+    try:
+        rgb = np.ascontiguousarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        result = landmarker.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+    finally:
+        landmarker.close()
+    if not result.face_landmarks:
+        return None
+    return ssj_face.points_from_landmarks(result.face_landmarks[0], image.shape[1], image.shape[0])
+
+
+def load_hair(log) -> ssj_face.HairOverlay | None:
+    """The user's imported Super Saiyan hair, if any. A bad picture never stops the app."""
+    try:
+        views = ssj_face.load_hair_views(HAIR_DIR, detect_face_points, log)
+    except Exception as error:
+        log(f"[Super Saiyan] Could not import the hair: {error}")
+        return None
+    if views:
+        log(f"[Super Saiyan] Golden hair ready ({len(views)} view{'s' if len(views) > 1 else ''}).")
+        return ssj_face.HairOverlay(views)
+    if not ssj_face.hair_sources(HAIR_DIR):
+        log("[Super Saiyan] No golden hair yet: run with --ssj-hair-photos to add yours.")
+    return None
+
+
+def hair_instructions() -> str:
+    return (
+        f"\n[Super Saiyan] Photos saved in {HAIR_DIR}.\n"
+        "Next steps (VanishCam never uploads anything; you choose the image tool):\n"
+        "  1. Open ChatGPT or Gemini, attach one photo and paste this prompt:\n\n"
+        f"     {ssj_face.HAIR_PROMPT}\n\n"
+        f"  2. Save the result in {HAIR_DIR} as ssj_<name>.png (for example ssj_front.png).\n"
+        "     Repeat for the other photos if you want the hair to follow your head when you turn it.\n"
+        "  3. Start VanishCam: the hair is imported automatically and shows up when you go Super Saiyan.\n"
+        f"The prompt is also in {HAIR_DIR / 'prompt.txt'}.\n"
+    )
+
+
+def capture_hair_photos(args: argparse.Namespace) -> int:
+    """Guided photos (front and both sides) to turn into Super Saiyan pictures with an image model."""
+    capture = open_camera(args.camera, args.width, args.height)
+    mirrored = not args.no_mirror
+    HAIR_DIR.mkdir(exist_ok=True)
+    cv2.namedWindow(WINDOW_NAME, window_flags())
+    taken: list[Path] = []
+    try:
+        for index, (name, hint) in enumerate(ssj_face.HAIR_VIEWS, start=1):
+            action = (f"Golden hair photo {index}/{len(ssj_face.HAIR_VIEWS)}: {hint}, face fully visible, "
+                      "good light. SPACE take it, S skip, Q quit.")
+            print(f"[Super Saiyan] {action}")
+            while True:
+                ok, frame = capture.read()
+                if not ok:
+                    raise RuntimeError("The webcam stopped sending frames.")
+                if mirrored:
+                    frame = cv2.flip(frame, 1)  # Same orientation as the live detection.
+                panel = render_status_panel(PANEL_WIDTH, frame.shape[0], "dragonball", "ready", "photo", action, [])
+                cv2.imshow(WINDOW_NAME, compose_dashboard(frame, panel))
+                key = cv2.waitKey(1) & 0xFF
+                if key in (ord("q"), 27):
+                    return 0 if taken else 1
+                if key == ord("s"):
+                    break
+                if key == ord(" "):
+                    path = HAIR_DIR / f"photo_{name}.jpg"
+                    cv2.imwrite(str(path), frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                    taken.append(path)
+                    print(f"[Super Saiyan] Saved {path.name}.")
+                    break
+    finally:
+        capture.release()
+        cv2.destroyAllWindows()
+        if taken:
+            (HAIR_DIR / "prompt.txt").write_text(ssj_face.HAIR_PROMPT + "\n")
+            print(hair_instructions())
+    return 0
+
+
 def run() -> int:
     args = parse_args()
     if getattr(args, "list_cameras", False):
@@ -1185,6 +1277,8 @@ def run() -> int:
         return 0
     if getattr(args, "self_test", False):
         return self_test()
+    if getattr(args, "ssj_hair_photos", False):
+        return capture_hair_photos(args)
     mode = choose_mode() if getattr(args, "menu", False) else (args.mode or DEFAULT_MODE)
     if mode is None:
         return 0
@@ -1269,9 +1363,11 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     }[mode]
     log("[Webcam] Step out of the frame: the background photo is taken in 4 seconds.")
     log(f"[Webcam] {gesture_help}")
+    hair = None
     if super_saiyan:
         log("[Webcam] Closed fists in front of your face, one on each side, for 1.5 seconds: Super Saiyan. "
             "Repeat (or press S) to go back to normal.")
+        hair = load_hair(log)
     log("[Webcam] Keys in the window: V vanish, R reappear/restart setup, S Super Saiyan, "
         "SPACE background, P pause, F fullscreen, Q quit.")
 
@@ -1558,9 +1654,12 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 if super_saiyan and state.phase == "ready" and power.phase != "off":
                     levels = power.levels(now)
                     mask = update_mask(0.1)
+                    faces = latest_faces(recognizer, elapsed_ms)
                     # The background plate and the head let the aura drop the chair from the silhouette.
-                    head = ssj.head_ellipse(latest_faces(recognizer, elapsed_ms), width, height)
-                    display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura, background, head)
+                    head = ssj.head_ellipse(faces, width, height)
+                    face = ssj_face.points_from_landmarks(faces[0], width, height) if faces else None
+                    display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura, background, head,
+                                                      face, hair)
 
             view_display = display
             if hud and state.phase == "calibrating":

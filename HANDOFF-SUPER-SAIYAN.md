@@ -85,15 +85,34 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
   `cv2.remap`). *Check:* unit tests (never inside the person, wraps around the whole outline, deterministic); renders.
 - [ ] **E3.2 Pre-rendered flame strip asset** (fire simulation with a toon shader, looping, tileable, < 3 MB, origin in
   NOTICE.md). *Check:* loop has no visible seam; cost per frame ≤ E1 aura.
-- [ ] **E3.3 Iris tint** (teal/green, luminance-preserving, FaceLandmarker iris points 468–477). *Check:* unit test on
-  synthetic landmarks; owner screenshot.
+- [x] **E3.3 Iris tint** (teal/green, luminance-preserving, FaceLandmarker iris points 468–477). *Check:* unit test on
+  synthetic landmarks; owner screenshot. *Done early at the owner's request, with golden brows (`ssj_face.tint_eyes`,
+  `tint_brows`): iris ∩ eye opening, pupil kept darker; brows only where darker than the surrounding skin.
+  `EyesAndBrowsTests`; owner screenshot pending (E4.4).*
 - [ ] **E3.4 Gate (owner)** on Ubuntu and Windows.
 
-### E4 — Golden hair (optional, §4.4)
+### E4 — Golden hair (§4.4)
 
-- [ ] **E4.0 Owner decision** on the local recolor and on the opt-in AI-generated hair (network call). Do not start
-  without it.
-- [ ] E4.1 Local hair recolor + spikes sprite anchored to the face. E4.2 (only if approved) opt-in personalised hair.
+- [x] **E4.0 Owner decision (2026-10-29):** personalised AI hair, via **import**: VanishCam takes the photos, the user
+  runs them through ChatGPT/Gemini themselves and drops the results in `ssj_hair/`. VanishCam opens no network
+  connection and holds no API key. No local recolor for now. The owner also asked for the eyes and brows now (E3.3).
+- [x] **E4.1 Guided photos.** `--ssj-hair-photos` (`vanish_cam.capture_hair_photos`): front + both sides, SPACE/S/Q,
+  same mirroring as the live detection, writes `ssj_hair/photo_*.jpg` + `prompt.txt` and prints the steps.
+  *Check:* `HairPhotoTests.test_guided_photos_skip_and_prompt`.
+- [x] **E4.2 Import.** `ssj_face.load_hair_views`: FaceLandmarker (IMAGE mode, `vanish_cam.detect_face_points`) on
+  each `ssj_*` picture; `hair_mask` = Lab gold test (`b > 25`, `b − a > 22`, `L > 90`) minus the lower face, closed,
+  only pieces touching the head, holes filled; cut-out + anchor points + yaw cached in `ssj_hair/.cache/` (invalidated
+  by size/mtime). Clear terminal messages for "no face" / "no golden hair". *Check:* `HairImportTests` (lamp far from
+  the head ignored, highlight inside the hair kept, cache reused, problems reported).
+- [x] **E4.3 Live fit.** `HairOverlay`: `estimateAffinePartial2D` (LMEDS) from 9 anchors (eye corners, nose, forehead,
+  chin, cheeks) to the live face, warp only the bbox, alpha blend; view picked by nearest yaw. Hair, eyes and brows
+  flicker in late in the charge (`PowerLevels.hair`). *Check:* `HairOverlayTests`, `TransformationTimelineTests`;
+  synthetic render (rotated 10°, scaled 0.9) fits the head and covers the real hair.
+- [ ] **E4.4 Gate (owner):** run `--ssj-hair-photos`, make the pictures, check the look on Ubuntu and Windows.
+  Known risks to watch: (a) a warm-lit forehead in the generated picture may be taken as hair; (b) the real hair can
+  peek out where the generated hair is smaller; (c) the hair and eyes follow the face at the detection rate (12.5 Hz),
+  so they lag a little on fast head moves until E2.3; (d) in a PyInstaller one-file build `APP_DIR` is a temporary
+  folder, so `ssj_hair/` must move to a user data folder before shipping binaries.
 
 ### E5 — macOS (after E1–E3 are approved on Ubuntu and Windows)
 
@@ -110,6 +129,8 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
   to open a PR). Next: CI result on Ubuntu + Windows, then the owner gate E1.8.
 - 2026-10-29: CI on `5af85f8`: `ubuntu-latest` ✅, `windows-latest` ✅ (unit tests + `--self-test` with the real
   MediaPipe models). macOS jobs still queued (runner issue, §0). **Waiting for the owner gate E1.8.**
+- 2026-10-29: owner asked about hair and eyes; decided the import approach (E4.0). E3.3 + E4.1–E4.3 done in
+  `ssj_face.py`; 111 tests pass on claude-bcn. Owner gates E1.8 and E4.4 can be done in the same session.
 
 ## 0. Start here
 

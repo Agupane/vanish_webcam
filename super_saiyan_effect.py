@@ -10,6 +10,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+try:
+    from . import ssj_face
+except ImportError:
+    import ssj_face
+
 
 CHARGE_SECONDS = 1.5
 FLASH_SECONDS = 0.45
@@ -366,6 +371,7 @@ class PowerLevels:
     flash: float = 0.0
     shake: float = 0.0
     radius: float = 1.0
+    hair: float = 0.0  # Golden hair, teal eyes and golden brows.
 
 
 @dataclass
@@ -401,17 +407,19 @@ class PowerState:
         age = max(0.0, now - self.started)
         if self.phase == "charging":
             charge = min(1.0, age / CHARGE_SECONDS)
-            return PowerLevels(aura=0.6 * charge, shake=2.0 + 6.0 * charge)
+            # Late in the charge the hair and eyes flicker between normal and golden, like in the series.
+            hair = 0.9 if charge >= 0.45 and int(age * 12.0) % 2 == 0 else 0.0
+            return PowerLevels(aura=0.6 * charge, shake=2.0 + 6.0 * charge, hair=hair)
         if self.phase == "flash":
             progress = min(1.0, age / FLASH_SECONDS)
             flash = 0.9 * age / 0.08 if age < 0.08 else 0.9 * math.exp(-(age - 0.08) * 8.0)
             return PowerLevels(aura=1.0, flash=flash, shake=6.0 * (1.0 - progress),
-                               radius=2.5 - 1.5 * progress)
+                               radius=2.5 - 1.5 * progress, hair=1.0)
         if self.phase == "super":
-            return PowerLevels(aura=1.0)
+            return PowerLevels(aura=1.0, hair=1.0)
         if self.phase == "powering_down":
             left = max(0.0, 1.0 - age / POWER_DOWN_SECONDS)
-            return PowerLevels(aura=left)
+            return PowerLevels(aura=left, hair=left)
         return PowerLevels()
 
 
@@ -427,10 +435,13 @@ def shake_frame(frame: np.ndarray, amplitude: float, t: float) -> np.ndarray:
 
 def render_super_saiyan(frame: np.ndarray, mask: np.ndarray | None,
                         levels: PowerLevels, t: float, aura: AuraRenderer | None,
-                        background: np.ndarray | None = None, head=None) -> np.ndarray:
+                        background: np.ndarray | None = None, head=None,
+                        face: np.ndarray | None = None, hair: ssj_face.HairOverlay | None = None) -> np.ndarray:
     output = frame
     if aura is not None:
         output = aura.render(output, mask, levels.aura, t, levels.radius, background, head)
+    # Eyes, brows and the imported hair, on top of the aura (spikes may stick out of the silhouette).
+    output = ssj_face.render_face(output, face, levels.hair, hair)
     if levels.flash > 0.0:
         output = np.clip(output.astype(np.float32) + (255.0 - output) * min(1.0, levels.flash),
                          0, 255).astype(np.uint8)
