@@ -166,7 +166,8 @@ blurry smudge. A high-back chair behind your head is left out of the aura using 
 follows whatever the camera sees as you, chair included, so it never paints over your body.
 
 Keys (with the VanishCam window focused): `V` vanish, `R` reappear (or restart the setup while calibrating), `S` Super
-Saiyan on/off, `SPACE` retake the background photo, `P` pause/resume, `F` fullscreen, `Q` quit. A side panel next to
+Saiyan on/off, `E` / `B` teal eyes / golden eyebrows on/off, `SPACE` retake the background photo (also the
+**Recalibrate background** button at the bottom of the side panel, next to the eye and eyebrow switches), `P` pause/resume, `F` fullscreen, `Q` quit. A side panel next to
 the video shows the next step, the keys and the recent events (use `--no-hud` to hide it); while the background is
 being captured it also outlines the person so you know whether the camera sees you.
 

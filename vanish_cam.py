@@ -1183,9 +1183,45 @@ def _panel_line(panel: np.ndarray, text: str, x: int, y: int,
     return y + int(round(24 * scale / 0.52))
 
 
+PANEL_BUTTON_HEIGHT = 34
+PANEL_BUTTON_GAP = 8
+
+
+def panel_controls(super_saiyan: bool, eyes: bool, brows: bool) -> list[tuple[str, str, bool | None]]:
+    """Clickable buttons of the side panel: (name, label, toggle state or None for a plain button)."""
+    controls: list[tuple[str, str, bool | None]] = [("recalibrate", "Recalibrate background (SPACE)", None)]
+    if super_saiyan:
+        controls += [("eyes", "Teal eyes (E)", eyes), ("brows", "Gold brows (B)", brows)]
+    return controls
+
+
+def panel_buttons(width: int, height: int, count: int) -> list[tuple[int, int, int, int]]:
+    """Rectangles (x0, y0, x1, y1) of the panel buttons at the bottom of the panel: the first one on its own row,
+    the switches side by side on the row below (keeps room for the log)."""
+    if count <= 0:
+        return []
+    bottom = height - 12
+    rects = []
+    if count > 1:
+        top = bottom - PANEL_BUTTON_HEIGHT
+        span = (width - 24 - PANEL_BUTTON_GAP * (count - 2)) / (count - 1)
+        for index in range(count - 1):
+            x0 = int(round(12 + index * (span + PANEL_BUTTON_GAP)))
+            rects.append((x0, top, int(round(x0 + span)), bottom))
+        bottom = top - PANEL_BUTTON_GAP
+    return [(12, bottom - PANEL_BUTTON_HEIGHT, width - 12, bottom)] + rects
+
+
+def panel_hit(width: int, height: int, controls, x: int, y: int) -> str | None:
+    for (name, _, _), (x0, y0, x1, y1) in zip(controls, panel_buttons(width, height, len(controls))):
+        if x0 <= x <= x1 and y0 <= y <= y1:
+            return name
+    return None
+
+
 def render_status_panel(width: int, height: int, mode: str, phase: str, camera: str,
-                        action: str, lines: list[str], version: str = "") -> np.ndarray:
-    """Side panel with the current step, keys and the recent messages."""
+                        action: str, lines: list[str], version: str = "", controls=()) -> np.ndarray:
+    """Side panel with the current step, keys, the recent messages and the clickable `controls`."""
     phase_label, accent = PHASE_STYLES.get(phase, ("READY", (110, 220, 120)))
     panel = np.empty((height, width, 3), np.uint8)
     panel[:] = (24, 27, 32)
@@ -1207,16 +1243,24 @@ def render_status_panel(width: int, height: int, mode: str, phase: str, camera: 
     y = _panel_line(panel, "KEYS", x, y, 0.46, (120, 135, 145))
     for line in ("V vanish   R reappear   S Super Saiyan",
                  "P pause   SPACE background   F fullscreen",
-                 "R restart setup while calibrating   Q quit"):
+                 "E eyes   B eyebrows (Super Saiyan)   Q quit"):
         y = _panel_line(panel, line, x, y, 0.48, (185, 195, 202))
+    rects = panel_buttons(width, height, len(controls))
+    bottom = (rects[0][1] - 10) if rects else height - 12
     y += 10
     y = _panel_line(panel, "LOG", x, y, 0.46, (120, 135, 145))
-    room = max(0, (height - y - 12) // 18)
-    for message in list(lines)[-room:]:
+    room = max(0, (bottom - y) // 18)
+    for message in list(lines)[-room:] if room else []:
         for line in _wrap(message, 44):
-            if y > height - 12:
+            if y > bottom:
                 break
             y = _panel_line(panel, line, x, y, 0.46, (150, 160, 168))
+    for (name, label, state), (x0, y0, x1, y1) in zip(controls, rects):
+        lit = bool(state)
+        cv2.rectangle(panel, (x0, y0), (x1, y1), (70, 104, 122) if lit else (48, 54, 62), -1)
+        cv2.rectangle(panel, (x0, y0), (x1, y1), (60, 190, 255) if lit else (111, 142, 153), 1)
+        text = label if state is None else f"{label}: {'on' if state else 'off'}"
+        _panel_line(panel, text, x0 + 10, (y0 + y1) // 2 + 6, 0.46 if state is not None else 0.5, (236, 239, 242))
     return panel
 
 
@@ -1665,13 +1709,36 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     last_display: np.ndarray | None = None
     panel_cache: dict[tuple, np.ndarray] = {}
 
+    def controls() -> list:
+        return panel_controls(super_saiyan, getattr(args, "ssj_eyes", True), getattr(args, "ssj_brows", True))
+
+    clicked: list[str | None] = [None]
+    panel_origin = [0, 0]  # Where the panel starts in the window (the video width) and its height.
+
+    def on_mouse(event, x, y, flags, userdata) -> None:
+        # Act on press: with a touchpad the pointer often drifts off the button before the release.
+        if event == cv2.EVENT_LBUTTONDOWN:
+            clicked[0] = panel_hit(PANEL_WIDTH, panel_origin[1], controls(), x - panel_origin[0], y)
+
+    if hud:
+        cv2.setMouseCallback(WINDOW_NAME, on_mouse)
+
+    def toggle_face(name: str) -> None:
+        attribute = "ssj_eyes" if name == "eyes" else "ssj_brows"
+        value = not getattr(args, attribute, True)
+        setattr(args, attribute, value)
+        home_ui.update_settings(SETTINGS_PATH, **{name: value})
+        label = "Teal eyes" if name == "eyes" else "Golden eyebrows"
+        log(f"[Super Saiyan] {label} {'on' if value else 'off'}.")
+
     def status_panel(phase_key: str, action: str, height: int, lines) -> np.ndarray:
         """Render the side panel only when its content changes."""
-        key = (phase_key, action, camera_name, height, tuple(lines))
+        current = controls()
+        key = (phase_key, action, camera_name, height, tuple(lines), tuple(current))
         panel = panel_cache.get(key)
         if panel is None:
             panel = render_status_panel(
-                PANEL_WIDTH, height, mode, phase_key, camera_name, action, list(lines), app_version()
+                PANEL_WIDTH, height, mode, phase_key, camera_name, action, list(lines), app_version(), current
             )
             if len(panel_cache) >= 6:
                 panel_cache.clear()
@@ -1924,15 +1991,23 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 state, mode, super_saiyan, power, gesture_help, calibration_remaining
             )
             panel = status_panel(phase_key, action, display.shape[0], log_lines)
+            panel_origin[:] = [view_display.shape[1], display.shape[0]]
             cv2.imshow(WINDOW_NAME, compose_dashboard(view_display, panel) if hud else view_display)
 
             key = cv2.waitKey(1) & 0xFF
+            button, clicked[0] = clicked[0], None
+            if key in (ord("e"), ord("E")):
+                button = "eyes"
+            elif key in (ord("b"), ord("B")):
+                button = "brows"
+            if button in ("eyes", "brows") and super_saiyan:
+                toggle_face(button)
             if key in (ord("q"), 27):
                 break
             if key in (ord("p"), ord("P")):
                 paused = True
                 log("[Webcam] Paused. Press P to continue.")
-            elif key == ord(" "):
+            elif key == ord(" ") or button == "recalibrate":
                 begin_calibration(now)
                 log("[Webcam] Step out of the frame: the new background photo is taken in 4 seconds.")
             elif key == ord("r") and (background is None or state.phase == "calibrating"):

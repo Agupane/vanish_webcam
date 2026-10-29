@@ -207,7 +207,7 @@ Linux-only. Trap: **OBS Virtual Camera is a DirectShow camera too**; if VanishCa
 
 **Next tasks, in order:**
 
-1. **E7, live controls (owner request, NOT started):** while running (phase `ready`), clickable buttons in the side
+1. **E7, live controls: DONE (2026-10-29, see the progress log); owner check pending.** Original plan: while running (phase `ready`), clickable buttons in the side
    panel: **Recalibrate** (same as SPACE: `begin_calibration(now)` plus the log line), **Teal eyes on/off** and
    **Golden eyebrows on/off** (toggle `args.ssj_eyes` / `args.ssj_brows`, keys `E` / `B`, persist into
    `vanishcam_settings.json` keeping mode and camera, e.g. a new `home_ui.update_settings(path, **values)`). Plan: a
@@ -327,6 +327,11 @@ charge. Tune in `super_saiyan_effect.py` (`AURA_TONES`, `AURA_RADIUS`, `FLAME_RI
   `VIEW_FADE_SECONDS 0.1`, `VIEW_SWITCH_HOLD 0.25`; (2) pale patches at the hair tips: the hair counted as body, so
   the room behind its see-through tips was not darkened and got the rim light -> `AuraRenderer` `cover` (hair: aura
   goes around it, room darkened, no rim) separate from `extra` (hands: body).
+- 2026-10-29: E7 live controls done: side panel buttons **Recalibrate background (SPACE)** (full row) and **Teal eyes
+  (E)** / **Gold brows (B)** (shared bottom row, so the log keeps room), drawn by `render_status_panel(...,
+  controls)`, hit-tested by `panel_hit` from a `cv2.setMouseCallback(WINDOW_NAME)` that subtracts the video width and
+  acts on press; keys `E` / `B`; `home_ui.update_settings` saves the switches. Plain OpenCV, so it should behave the
+  same in Qt (Ubuntu) and Cocoa (macOS) windows: not verified there yet. 171 tests.
 
 ## 0. Start here
 

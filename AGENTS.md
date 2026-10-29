@@ -62,7 +62,7 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
 - **Cameras:** `find_cameras` returns `[(source, label)]`: Linux from sysfs (v4l2loopback skipped), Windows from
   `pygrabber` in DirectShow order (= OpenCV index with `CAP_DSHOW`), hiding names in `VIRTUAL_CAMERA_WORDS` (OBS
   Virtual Camera is a DirectShow camera too: never read our own output); macOS has no picker yet.
-- **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear (restart setup while calibrating), `S` Super Saiyan on/off (Dragon Ball), `SPACE` recalibrate, `P` pause/resume, `F` fullscreen, `Q`/`ESC` quit.
+- **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear (restart setup while calibrating), `S` Super Saiyan on/off (Dragon Ball), `E` / `B` teal eyes / golden brows on/off (saved), `SPACE` recalibrate (also the panel's buttons: `panel_controls` / `panel_buttons` / `panel_hit`, mouse callback on `WINDOW_NAME`, acting on press), `P` pause/resume, `F` fullscreen, `Q`/`ESC` quit.
 - **Guided setup:** during calibration the preview outlines the detected person (`draw_setup_marks`, HUD only) and the side panel says whether to step out; `P` freezes the loop and `R` restarts calibration.
 - **Mirroring:** the preview is mirrored; the virtual camera gets the unmirrored image unless `--mirror-output`.
 - **Status panel:** `render_status_panel` + `compose_dashboard` add a side panel with the next step, keys and recent

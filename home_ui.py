@@ -341,6 +341,16 @@ def save_settings(path: Path, settings: HomeSettings) -> None:
         pass
 
 
+def update_settings(path: Path, **values) -> None:
+    """Change some saved settings (the live window's eye/brow switches), keeping the others."""
+    data = load_settings(path)
+    data.update(values)
+    try:
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
 def copy_text(text: str, system: str | None = None) -> bool:
     """Put text on the clipboard with the OS tool; False if none worked."""
     system = system or platform.system()

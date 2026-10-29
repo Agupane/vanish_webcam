@@ -320,6 +320,26 @@ class WindowsCameraTests(unittest.TestCase):
         self.assertEqual(panel.shape, (300, 360, 3))
 
 
+class LivePanelTests(unittest.TestCase):
+    def test_buttons_sit_at_the_bottom_and_are_hit_where_drawn(self):
+        controls = app.panel_controls(True, True, False)
+        self.assertEqual([name for name, _, _ in controls], ["recalibrate", "eyes", "brows"])
+        rects = app.panel_buttons(380, 540, len(controls))
+        self.assertEqual(rects[-1][3], 540 - 12)
+        self.assertEqual(rects[1][1], rects[2][1])  # The two switches share the bottom row.
+        for (name, _, _), (x0, y0, x1, y1) in zip(controls, rects):
+            self.assertEqual(app.panel_hit(380, 540, controls, (x0 + x1) // 2, (y0 + y1) // 2), name)
+        self.assertIsNone(app.panel_hit(380, 540, controls, 190, 40))
+        self.assertEqual([name for name, _, _ in app.panel_controls(False, True, True)], ["recalibrate"])
+
+    def test_panel_draws_the_switch_states(self):
+        on = app.render_status_panel(380, 540, "dragonball", "super", "0", "x", [], "", app.panel_controls(True, True, True))
+        off = app.render_status_panel(380, 540, "dragonball", "super", "0", "x", [], "", app.panel_controls(True, False, True))
+        self.assertEqual(on.shape, (540, 380, 3))
+        x0, y0, x1, y1 = app.panel_buttons(380, 540, 3)[1]
+        self.assertTrue(np.any(on[y0:y1, x0:x1] != off[y0:y1, x0:x1]))
+
+
 class DashboardTests(unittest.TestCase):
     def test_compose_keeps_the_video_untouched_on_the_left(self):
         display = np.full((24, 40, 3), 7, np.uint8)

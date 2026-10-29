@@ -7,6 +7,9 @@ All notable changes to this fork are documented here. The format is based on
 
 ### Changed
 
+- Live controls in the side panel: **Recalibrate background** and the **Teal eyes** / **Gold brows** switches
+  (also keys `E` / `B`), clickable while running; the switches are remembered for the next start.
+
 - Super Saiyan golden hair moves smoothly: the head is tracked every frame (filtered and predicted between the
   ~12.5 face detections per second, chin left out of the fit so talking does not resize the hair) instead of holding
   and jumping; the hair sways behind the head with one overshoot, pops up at the transformation, flutters gently with

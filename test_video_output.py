@@ -85,6 +85,7 @@ def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
         mocks.enter_context(patch.object(app.time, "perf_counter", side_effect=lambda: clock["t"]))
         mocks.enter_context(patch.object(app.cv2, "namedWindow"))
         mocks.enter_context(patch.object(app.cv2, "resizeWindow"))
+        mocks.enter_context(patch.object(app.cv2, "setMouseCallback"))
         destroy = mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
         mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: displayed.append(frame.copy())))
         mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=wait_key))

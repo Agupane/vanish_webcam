@@ -475,6 +475,13 @@ class SuperSaiyanLoopTests(unittest.TestCase):
         transform.play.assert_called_once()
         hum.stop.assert_any_call(500)
 
+    def test_keys_e_and_b_switch_the_eyes_and_brows_live_and_remember_them(self):
+        with patch.object(app.home_ui, "update_settings") as saved:
+            run_loop(mode="dragonball", keys={50: ord("e"), 60: ord("b"), 70: ord("e")}, mask=person_in_middle(),
+                     seconds=8.0, ssj_eyes=True, ssj_brows=True)
+        self.assertEqual([call.kwargs for call in saved.call_args_list],
+                         [{"eyes": False}, {"brows": False}, {"eyes": True}])
+
     def test_teleport_while_transformed_cuts_and_resumes_the_hum(self):
         teleport = lambda t: 6.0 <= t < 7.3 or 8.5 <= t < 9.8
         frames, shown, _, sound, _ = run_loop(
