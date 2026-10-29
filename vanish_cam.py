@@ -165,7 +165,7 @@ def find_linux_cameras(sysfs: Path = Path("/sys/class/video4linux")) -> list[str
     cameras = []
     for node in sorted(sysfs.glob("video*"), key=lambda path: int(path.name[5:] or 0)):
         try:
-            if "/virtual/" in str(node.resolve()):
+            if "virtual" in node.resolve().parts:
                 continue
             if (node / "index").read_text().strip() != "0":
                 continue
@@ -416,12 +416,18 @@ def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCa
     return capture
 
 
+def base_options(model: Path) -> python.BaseOptions:
+    # Force the CPU: on macOS MediaPipe otherwise reaches for Metal and aborts
+    # when no GPU service is available ("Check failed: service_").
+    return python.BaseOptions(model_asset_path=str(model), delegate=python.BaseOptions.Delegate.CPU)
+
+
 def create_dragonball_detector() -> dragonball.InstantTransmissionDetector:
     for path in (HAND_MODEL, FACE_MODEL):
         if not path.is_file():
             raise RuntimeError(f"Model not found: {path}")
     hands = vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-        base_options=python.BaseOptions(model_asset_path=str(HAND_MODEL)),
+        base_options=base_options(HAND_MODEL),
         running_mode=vision.RunningMode.VIDEO,
         num_hands=2,
         min_hand_detection_confidence=0.4,
@@ -430,7 +436,7 @@ def create_dragonball_detector() -> dragonball.InstantTransmissionDetector:
     ))
     try:
         faces = vision.FaceLandmarker.create_from_options(vision.FaceLandmarkerOptions(
-            base_options=python.BaseOptions(model_asset_path=str(FACE_MODEL)),
+            base_options=base_options(FACE_MODEL),
             running_mode=vision.RunningMode.VIDEO,
             num_faces=1,
             # The hand on the forehead covers part of the face: low thresholds.
@@ -449,7 +455,7 @@ def create_tasks(mode: str = "normal") -> tuple[
     MultiViewGestureRecognizer | MultiViewHandLandmarker | dragonball.InstantTransmissionDetector,
 ]:
     segmenter_options = vision.ImageSegmenterOptions(
-        base_options=python.BaseOptions(model_asset_path=str(SEGMENTER_MODEL)),
+        base_options=base_options(SEGMENTER_MODEL),
         running_mode=vision.RunningMode.VIDEO,
         output_confidence_masks=True,
         output_category_mask=False,
@@ -465,7 +471,7 @@ def create_tasks(mode: str = "normal") -> tuple[
         if not HAND_MODEL.is_file():
             raise RuntimeError(f"Hand model not found: {HAND_MODEL}")
         options = vision.HandLandmarkerOptions(
-            base_options=python.BaseOptions(model_asset_path=str(HAND_MODEL)),
+            base_options=base_options(HAND_MODEL),
             running_mode=vision.RunningMode.VIDEO,
             num_hands=2,
             min_hand_detection_confidence=0.35,
@@ -480,7 +486,7 @@ def create_tasks(mode: str = "normal") -> tuple[
             category_allowlist=["Victory"],
         )
         options = vision.GestureRecognizerOptions(
-            base_options=python.BaseOptions(model_asset_path=str(GESTURE_MODEL)),
+            base_options=base_options(GESTURE_MODEL),
             running_mode=vision.RunningMode.VIDEO,
             num_hands=2,
             min_hand_detection_confidence=0.35,
@@ -886,7 +892,7 @@ def create_hair_tracker() -> ssj.HairTracker | None:
         return None
     try:
         segmenter = vision.ImageSegmenter.create_from_options(vision.ImageSegmenterOptions(
-            base_options=python.BaseOptions(model_asset_path=str(MULTICLASS_MODEL)),
+            base_options=base_options(MULTICLASS_MODEL),
             running_mode=vision.RunningMode.IMAGE,
             output_confidence_masks=True,
             output_category_mask=False,
