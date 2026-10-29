@@ -33,7 +33,18 @@ cd ~/VanishCam
 
 It asks for your `sudo` password to install the packages and the **VanishCam** virtual camera. If your Ubuntu's virtual camera package doesn't build for your kernel (this happens on 22.04 with 6.8 kernels), the installer builds the official version.
 
-**Secure Boot:** if `apt` asks for a password to sign the module, pick one and reboot. On startup a blue screen (MOK) appears: choose *Enroll MOK* → *Continue*, type that password and reboot. Then run the installer again.
+**Secure Boot:** if the installer asks for a one-time password to trust the virtual camera module, pick one and reboot. On startup a blue screen (MOK) appears: choose *Enroll MOK* → *Continue* → *Yes*, type that password and reboot. Then run the installer again.
+
+#### Troubleshooting (Ubuntu)
+
+The installer can be run again at any time; it skips what is already done.
+
+- **`v4l2loopback-dkms` fails with "Bad return status for module build" (dpkg error code 10 or 1).** Ubuntu 22.04's package (0.12.7) does not build on kernels 6.8 or newer. The installer removes the broken package and builds upstream v4l2loopback 0.13.2 with DKMS instead. If apt keeps failing on it, clean it by hand and run the installer again: `sudo dpkg --purge --force-remove-reinstreq v4l2loopback-dkms && sudo dpkg --configure -a`. The build log is in `/var/lib/dkms/v4l2loopback/0.13.2/build/make.log`.
+- **`modprobe: ERROR: could not insert 'v4l2loopback': Key was rejected by service`.** Secure Boot is on and the module's signing key (`/var/lib/shim-signed/mok/MOK.der`) is not enrolled. The installer registers it with `mokutil --import` and asks you for a one-time password. Reboot, choose *Enroll MOK* → *Continue* → *Yes* on the blue screen, type that password, and run the installer again. Check with `mokutil --test-key /var/lib/shim-signed/mok/MOK.der` (should say "is already enrolled") and `modinfo -F signer v4l2loopback` (should not be empty).
+- **`linux-headers-… is not available` or "kernel headers are missing".** Your running kernel is older than the ones in the archive. Run `sudo apt update && sudo apt full-upgrade`, reboot, and run the installer again.
+- **`NO_PUBKEY` / "repository is not signed" during `apt-get update`.** A third-party repository (yarn, etc.) has an expired or missing key. The installer continues anyway; to silence it, fix or remove that repository in `/etc/apt/sources.list.d/`.
+- **After a kernel update the camera disappears.** DKMS rebuilds the module for the new kernel; if Secure Boot rejects it, run the installer again to sign it.
+- **`OSError: libGLESv2.so.2` or `libEGL.so.1` when starting.** Install `libgles2 libegl1` (the installer does it).
 
 ### Windows
 
