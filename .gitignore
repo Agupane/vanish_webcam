@@ -7,6 +7,8 @@ __pycache__/
 models/
 # The user's photos and Super Saiyan pictures: personal, never committed.
 ssj_hair/
+# Last effect and camera chosen in the home window.
+vanishcam_settings.json
 *.part
 build/
 dist/

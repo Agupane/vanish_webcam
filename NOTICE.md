@@ -20,6 +20,7 @@ at the time of writing.
 
 These files did not exist upstream:
 
+- `home_ui.py`, `ssj_face.py` and their tests `test_home_ui.py`, `test_ssj_face.py`.
 - `dragonball_effect.py`, `super_saiyan_effect.py` and their tests `test_dragonball_effect.py`,
   `test_super_saiyan_effect.py`. Upstream's README described a "Goku" mode, but no code for it was ever published
   upstream; this implementation is new (`git blame -C` matches only a few generic lines, such as imports, to upstream).
@@ -85,6 +86,8 @@ upstream source) on the user's machine.
 | [numpy](https://pypi.org/project/numpy/) | BSD-3-Clause | Recent wheels also include 0BSD, MIT, Zlib and CC0-1.0 parts |
 | [pyvirtualcam](https://github.com/letmaik/pyvirtualcam) | GPL-2.0 | See below |
 | [pygame](https://pypi.org/project/pygame/) | LGPL-2.1 | |
+| [pygrabber](https://github.com/andreaschiavinato/python_grabber) | MIT | Windows only: webcam names for the camera picker |
+| [comtypes](https://github.com/enthought/comtypes) | MIT | Windows only, required by pygrabber |
 | [v4l2loopback](https://github.com/umlaeute/v4l2loopback) | GPL-2.0 | Linux kernel module, installed from the distro or built from a pinned upstream commit on the user's machine |
 | [uv](https://github.com/astral-sh/uv) | MIT or Apache-2.0 | Installed by `install.sh` / `install.ps1` to manage Python; not a library |
 | [OBS Studio](https://obsproject.com) | GPL-2.0 or later | Installed by the installers on Windows/macOS for its virtual camera; a separate program |

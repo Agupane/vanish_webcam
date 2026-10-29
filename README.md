@@ -119,6 +119,11 @@ On Windows, run `install.ps1` again.
 | Windows | **VanishCam** on the Desktop, or `vanishcam.bat` |
 | macOS | **VanishCam.command** on the Desktop, or `~/VanishCam/vanishcam.sh` |
 
+Opened from the shortcut or the menu (no options), VanishCam starts with a **home window** where you do all the
+setup with the mouse: the effect (Dragon Ball, Normal, Naruto), the camera (only when there are several; virtual
+cameras such as OBS Virtual Camera are hidden) and the Super Saiyan golden hair. It remembers your last effect and
+camera. Press **START** (or `Enter`).
+
 1. A window with your camera opens. **Step out of the frame**: after 4 seconds it takes a photo of the empty background (the terminal tells you).
 2. Step back in and make the gesture, **holding it**: you vanish.
 3. To come back, **lower your hand and repeat the gesture**.
@@ -140,12 +145,14 @@ to power down. Teleporting while transformed keeps the transformation.
 **Golden hair (optional, once):** VanishCam does not draw the hair itself: you make it from your own photos with an
 image tool you choose, and VanishCam never uploads anything.
 
-1. Run `./vanishcam.sh --ssj-hair-photos` (Windows: `vanishcam.bat --ssj-hair-photos`). It takes three photos (front
-   and a little turned to each side; `SPACE` take, `S` skip, `Q` quit), saves them in the `ssj_hair` folder of the app
-   and prints a prompt (also saved as `ssj_hair/prompt.txt`).
-2. In ChatGPT or Gemini (the free versions work), attach a photo and paste the prompt.
-3. Save the result in `ssj_hair` as `ssj_front.png` (and `ssj_left.png`, `ssj_right.png` for the other photos, so the
-   hair follows your head when you turn it). Start VanishCam: the hair is imported automatically.
+1. In the home window (Dragon Ball selected), click **Take photos**. It takes three photos (front and a little
+   turned to each side; `SPACE` take, `S` skip, `Q` quit) and saves them in the `ssj_hair` folder of the app.
+   From a terminal: `./vanishcam.sh --ssj-hair-photos` (Windows: `vanishcam.bat --ssj-hair-photos`).
+2. Click **Copy prompt**, open ChatGPT or Gemini (the free versions work), attach a photo and paste the prompt (it is
+   also in `ssj_hair/prompt.txt`).
+3. Click **Open folder** and save the result there as `ssj_front.png` (and `ssj_left.png`, `ssj_right.png` for the
+   other photos, so the hair follows your head when you turn it). Click **Check pictures**: it says whether each
+   picture works. Then **START**: the hair is imported automatically.
 
 The picture must show the whole face and clearly golden hair on a plain background; if not, the terminal says why.
 Your photos stay in `ssj_hair` until you delete them; uploading them to an image tool is your choice and follows that
@@ -161,7 +168,7 @@ Saiyan on/off, `SPACE` retake the background photo, `P` pause/resume, `F` fullsc
 the video shows the next step, the keys and the recent events (use `--no-hud` to hide it); while the background is
 being captured it also outlines the person so you know whether the camera sees you.
 
-**Several cameras?** When you start VanishCam and it finds more than one, it shows a window with a live preview: use `A`/`D` or the arrow keys to change camera, `Enter` to start and `Q` to cancel. You can also list them with `./vanishcam.sh --list-cameras` and force one with `./vanishcam.sh --camera 4` (or `--camera /dev/video4`).
+**Several cameras?** Click **Change** next to the camera in the home window (or start VanishCam without the home window and without `--camera`): a window with a live preview opens; use `A`/`D` or the arrow keys to change camera, `Enter` to pick it and `Q` to cancel. The cameras are listed by name on Ubuntu and Windows; virtual cameras (OBS Virtual Camera, the VanishCam device, Meta Quest headsets) are hidden so VanishCam never reads its own output. You can also list them with `--list-cameras` and force one with `--camera 4` (on Ubuntu also `--camera /dev/video4`).
 
 **In Zoom or Meet**, open VanishCam first and then pick the camera in the video settings:
 

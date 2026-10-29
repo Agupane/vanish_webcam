@@ -225,7 +225,7 @@ class HairPhotoTests(unittest.TestCase):
                 patch.object(app, "render_status_panel",
                              side_effect=lambda width, height, *a: np.zeros((height, width, 3), np.uint8)), \
                 patch.object(app.cv2, "namedWindow"), patch.object(app.cv2, "imshow"), \
-                patch.object(app.cv2, "destroyAllWindows"), \
+                patch.object(app.cv2, "destroyWindow") as destroyed, \
                 patch.object(app.cv2, "waitKey", side_effect=lambda _: next(keys)), \
                 patch("builtins.print", side_effect=lambda *a, **k: printed.append(" ".join(map(str, a)))):
             self.assertEqual(app.capture_hair_photos(args), 0)
@@ -233,6 +233,7 @@ class HairPhotoTests(unittest.TestCase):
             self.assertEqual(names, ["photo_front.jpg", "photo_right.jpg", "prompt.txt"])
             self.assertIn("Super Saiyan hair", (Path(folder) / "prompt.txt").read_text())
         capture.release.assert_called_once()
+        destroyed.assert_called_once_with(app.WINDOW_NAME)  # Only its own window: the home window may be open.
         self.assertTrue(any("ChatGPT or Gemini" in line for line in printed))
 
     def test_load_hair_without_pictures_gives_a_hint(self):

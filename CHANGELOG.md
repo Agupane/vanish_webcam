@@ -7,6 +7,14 @@ All notable changes to this fork are documented here. The format is based on
 
 ### Changed
 
+- Started without options (Desktop shortcut, Applications menu), VanishCam opens a home window (`home_ui.py`) for the
+  effect, the camera and the Super Saiyan hair (take photos, copy the prompt, open the folder, check the pictures),
+  then **START**. It remembers the last effect and camera (by name) in the gitignored `vanishcam_settings.json`.
+  `--home` shows it with other options; any option skips it as before.
+- Windows camera picker: webcams are listed by name (`pygrabber`, DirectShow order = OpenCV index), virtual cameras
+  (OBS Virtual Camera, Meta Quest headsets...) are hidden, the only real webcam is opened directly instead of index 0,
+  and `--list-cameras` works on Windows. With only virtual cameras VanishCam stops with a list instead of reading one.
+
 - Super Saiyan aura, second version: three flat cel-shaded tones with rising flame tongues, alpha blended so it shows on
   light walls; the room darkens while transformed and a thin rim of light runs inside the edge of the body (the
   interior is untouched). The calibrated background photo plus a head ellipse from the face landmarks remove static

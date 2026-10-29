@@ -2,10 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import numpy as np
 import mediapipe as mp
 
+import vanish_cam as app
 from vanish_cam import (
     GestureHold, MultiViewGestureRecognizer, camera_source, compose_dashboard,
     find_linux_cameras, linux_camera_label, mode_name, recognize_gesture,
@@ -256,7 +258,10 @@ class LinuxCameraTests(unittest.TestCase):
                 device = root / "devices" / parent / name
                 device.mkdir(parents=True)
                 (device / "index").write_text(index + "\n")
-                (sysfs / name).symlink_to(device)
+                try:
+                    (sysfs / name).symlink_to(device)
+                except OSError:  # Windows without Developer Mode cannot create symlinks.
+                    self.skipTest("symlinks are not available")
             self.assertEqual(find_linux_cameras(sysfs), ["/dev/video0", "/dev/video2"])
 
     def test_camera_accepts_index_or_device_path(self):
@@ -270,6 +275,49 @@ class LinuxCameraTests(unittest.TestCase):
             (device / "name").write_text("USB Camera\n")
             self.assertEqual(linux_camera_label("/dev/video2", Path(root)), "USB Camera")
             self.assertEqual(linux_camera_label("/dev/video9", Path(root)), "")
+
+
+class WindowsCameraTests(unittest.TestCase):
+    def test_names_keep_opencv_indices_and_hide_virtual_cameras(self):
+        names = ["OBS Virtual Camera", "Integrated Camera", "Meta Quest 3", "Logitech C920"]
+        self.assertEqual(app.find_windows_cameras(names),
+                         [(1, "Integrated Camera"), (3, "Logitech C920")])
+
+    def test_probes_indices_when_names_are_unavailable(self):
+        captures = {0: Mock(), 2: Mock()}
+        with patch.object(app, "windows_camera_names", return_value=None):
+            cameras = app.find_windows_cameras(probe=captures.get)
+        self.assertEqual(cameras, [(0, "Camera 0"), (2, "Camera 2")])
+        for capture in captures.values():
+            capture.release.assert_called_once()
+
+    def test_open_camera_picks_the_only_real_camera(self):
+        info = {}
+        capture = Mock()
+        with patch.object(app.platform, "system", return_value="Windows"), \
+                patch.object(app, "windows_camera_names", return_value=["OBS Virtual Camera", "Integrated Camera"]), \
+                patch.object(app, "_open_capture", return_value=capture) as opened, \
+                patch("builtins.print"):
+            self.assertIs(app.open_camera(None, 640, 480, info), capture)
+        self.assertEqual(opened.call_args.args[0], 1)
+        self.assertEqual(info["label"], "1 (Integrated Camera)")
+
+    def test_open_camera_refuses_to_read_only_virtual_cameras(self):
+        with patch.object(app.platform, "system", return_value="Windows"), \
+                patch.object(app, "windows_camera_names", return_value=["OBS Virtual Camera", "Meta Quest 2"]), \
+                patch.object(app, "_open_capture") as opened, patch("builtins.print"):
+            with self.assertRaisesRegex(RuntimeError, "Only virtual cameras"):
+                app.open_camera(None, 640, 480)
+        opened.assert_not_called()
+
+    def test_explicit_camera_gets_its_name(self):
+        with patch.object(app, "windows_camera_names", return_value=["OBS Virtual Camera", "Integrated Camera"]):
+            self.assertEqual(app.camera_label(1, "Windows"), "Integrated Camera")
+            self.assertEqual(app.camera_label(7, "Windows"), "")
+
+    def test_camera_panel_lists_names(self):
+        panel = app.render_camera_panel(360, 300, [(1, "Integrated Camera"), (3, "Kamera ü")], 1)
+        self.assertEqual(panel.shape, (300, 360, 3))
 
 
 class DashboardTests(unittest.TestCase):

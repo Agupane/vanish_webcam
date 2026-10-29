@@ -24,6 +24,7 @@ from mediapipe.tasks.python import vision
 
 try:
     from . import dragonball_effect as dragonball
+    from . import home_ui
     from . import ssj_face
     from . import super_saiyan_effect as ssj
     from .naruto_effect import (
@@ -33,6 +34,7 @@ try:
     from .vanish_sound import SOUND_PATH, VanishSound
 except ImportError:
     import dragonball_effect as dragonball
+    import home_ui
     import ssj_face
     import super_saiyan_effect as ssj
     from naruto_effect import (
@@ -46,6 +48,8 @@ APP_DIR = Path(__file__).resolve().parent
 MODEL_DIR = APP_DIR / "models"
 # Super Saiyan hair: the user's photos and the golden versions they made with an image model (gitignored).
 HAIR_DIR = APP_DIR / "ssj_hair"
+# Last effect and camera chosen in the home window (gitignored).
+SETTINGS_PATH = APP_DIR / "vanishcam_settings.json"
 WINDOW_NAME = "VanishCam - Preview"
 CAMERA_WINDOW = "VanishCam - Choose camera"
 PANEL_WIDTH = 380
@@ -185,17 +189,83 @@ def linux_camera_label(device: str, sysfs: Path = Path("/sys/class/video4linux")
         return ""
 
 
-def list_linux_cameras() -> None:
-    cameras = find_linux_cameras()
+# DirectShow cameras that are not a webcam. OBS Virtual Camera is VanishCam's own output: opening it
+# would read our own video back. The Meta Quest entries come from the headset software.
+VIRTUAL_CAMERA_WORDS = ("virtual", "obs", "unity video capture", "vanishcam", "meta quest")
+WINDOWS_PROBE_INDICES = range(5)
+
+
+def windows_camera_names() -> list[str] | None:
+    """DirectShow video inputs in the order OpenCV numbers them with CAP_DSHOW; None if unavailable."""
+    try:
+        from pygrabber.dshow_graph import FilterGraph
+        return list(FilterGraph().get_input_devices())
+    except Exception:  # Missing package, COM error, or no media components (Windows "N" editions).
+        return None
+
+
+def is_virtual_camera(name: str) -> bool:
+    lowered = name.lower()
+    return any(word in lowered for word in VIRTUAL_CAMERA_WORDS)
+
+
+def find_windows_cameras(names: list[str] | None = None, probe=None) -> list[tuple[int, str]]:
+    """Real Windows webcams as (OpenCV index, name). Without names, probes the first indices."""
+    if names is None:
+        names = windows_camera_names()
+    if names is not None:
+        return [(index, name) for index, name in enumerate(names) if not is_virtual_camera(name)]
+    probe = probe or (lambda index: _open_capture(index, 640, 480, "Windows"))
+    cameras = []
+    for index in WINDOWS_PROBE_INDICES:
+        capture = probe(index)
+        if capture is not None:
+            capture.release()
+            cameras.append((index, f"Camera {index}"))
+    return cameras
+
+
+def find_cameras(system: str | None = None) -> list[tuple[int | str, str]]:
+    """Real webcams for the current OS as (source for --camera, human-readable name)."""
+    system = system or platform.system()
+    if system == "Linux":
+        return [(device, linux_camera_label(device)) for device in find_linux_cameras()]
+    if system == "Windows":
+        return find_windows_cameras()
+    return []  # macOS: no picker yet (E5).
+
+
+def camera_label(source: int | str, system: str | None = None) -> str:
+    """Name of a webcam given by --camera (empty when unknown)."""
+    system = system or platform.system()
+    if isinstance(source, str):
+        return linux_camera_label(source)
+    if system == "Windows":
+        names = windows_camera_names()
+        if names and 0 <= source < len(names):
+            return names[source]
+    return ""
+
+
+def camera_number(source: int | str) -> str:
+    """What to pass to --camera: N for /dev/videoN on Linux, the index elsewhere."""
+    return Path(source).name[5:] if isinstance(source, str) else str(source)
+
+
+def list_cameras(system: str | None = None) -> None:
+    system = system or platform.system()
+    cameras = find_cameras(system)
     if not cameras:
-        print("[Webcam] No real Linux webcams found (virtual cameras are ignored).")
+        print("[Webcam] No real webcams found (virtual cameras are ignored).")
+        if system == "Windows":
+            for index, name in enumerate(windows_camera_names() or []):
+                print(f"  {index}  {name}  (ignored: virtual camera)")
         return
     print("[Webcam] Cameras:")
-    for device in cameras:
-        label = linux_camera_label(device)
-        number = Path(device).name[5:]
-        print(f"  {device}  {label}  (use --camera {number})".rstrip())
-    print("[Webcam] On Linux, --camera N means /dev/videoN.")
+    for source, label in cameras:
+        print(f"  {source}  {label}  (use --camera {camera_number(source)})".replace("    ", "  "))
+    if system == "Linux":
+        print("[Webcam] On Linux, --camera N means /dev/videoN.")
 
 
 def mode_name(value: str) -> str:
@@ -218,7 +288,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--list-cameras", action="store_true",
-        help="List the real webcams detected on Linux and exit",
+        help="List the real webcams detected (Linux and Windows) and exit",
     )
     parser.add_argument("--width", type=int, default=960, help="Video width")
     parser.add_argument("--height", type=int, default=540, help="Video height")
@@ -256,6 +326,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--menu", action="store_true", help="Show the menu to choose the effect",
+    )
+    parser.add_argument(
+        "--home", action="store_true",
+        help="Show the home window (effect, camera, Super Saiyan hair) before starting; "
+             "the launchers do this when started without options",
     )
     parser.add_argument(
         "--gesture-debug", action="store_true",
@@ -454,13 +529,14 @@ def _camera_preview(capture: cv2.VideoCapture | None, width: int, height: int,
     return cv2.flip(frame, 1) if mirrored else frame
 
 
-def choose_camera_window(cameras: list[int | str], width: int, height: int) -> int | str | None:
+def choose_camera_window(cameras: list[tuple[int | str, str]], width: int, height: int,
+                         selected: int = 0) -> int | str | None:
     """Modal picker with a live preview: A/D or arrows change, Enter starts, Q cancels."""
     if not cameras:
         return None
-    selected = 0
+    selected = selected if 0 <= selected < len(cameras) else 0
     panel_width = 360
-    capture = _open_capture(cameras[selected], width, height)
+    capture = _open_capture(cameras[selected][0], width, height)
     cv2.namedWindow(CAMERA_WINDOW, window_flags())
     cv2.resizeWindow(CAMERA_WINDOW, width + panel_width, height)
     try:
@@ -470,7 +546,7 @@ def choose_camera_window(cameras: list[int | str], width: int, height: int) -> i
             cv2.imshow(CAMERA_WINDOW, compose_dashboard(frame, panel))
             key = cv2.waitKey(30) & 0xFF
             if key in (10, 13, 32):
-                return cameras[selected]
+                return cameras[selected][0]
             if key in (ord("q"), ord("Q"), 27):
                 return None
             next_index = selected
@@ -486,7 +562,7 @@ def choose_camera_window(cameras: list[int | str], width: int, height: int) -> i
                 selected = next_index
                 if capture is not None:
                     capture.release()
-                capture = _open_capture(cameras[selected], width, height)
+                capture = _open_capture(cameras[selected][0], width, height)
             if cv2.getWindowProperty(CAMERA_WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                 return None
     finally:
@@ -498,17 +574,25 @@ def choose_camera_window(cameras: list[int | str], width: int, height: int) -> i
 def open_camera(index: int | str | None, width: int, height: int,
                 info: dict | None = None) -> cv2.VideoCapture:
     system = platform.system()
+    label = ""
     if index is None:
-        cameras = find_linux_cameras() if system == "Linux" else []
+        cameras = find_cameras(system)
         if len(cameras) > 1:
             index = choose_camera_window(cameras, width, height)
             if index is None:
                 raise RuntimeError("Camera selection cancelled.")
+            label = dict(cameras)[index]
         elif cameras:
-            index = cameras[0]
+            index, label = cameras[0]
+        elif system == "Windows" and windows_camera_names():
+            list_cameras(system)
+            raise RuntimeError(
+                "Only virtual cameras were found. Connect a webcam, or pick one of the cameras above with --camera N."
+            )
         else:
             index = 0
-    label = linux_camera_label(index) if isinstance(index, str) else ""
+    else:
+        label = camera_label(index, system)
     name = f"{index}" + (f" ({label})" if label else "")
     if info is not None:
         info["label"] = name
@@ -516,13 +600,13 @@ def open_camera(index: int | str | None, width: int, height: int,
 
     capture = _open_capture(index, width, height, system)
     if capture is None:
-        if system == "Linux":
-            list_linux_cameras()
+        if system in ("Linux", "Windows"):
+            list_cameras(system)
         hint = {
             "Linux": "list the webcams with 'v4l2-ctl --list-devices'",
             "Darwin": ("give Terminal camera access in System Settings → "
                        "Privacy & Security → Camera, or try --camera 1"),
-        }.get(system, "try --camera 1")
+        }.get(system, "try another --camera number from the list above")
         raise RuntimeError(
             f"Webcam {index} is not available. Close any other apps using it, or {hint}."
         )
@@ -1103,7 +1187,12 @@ def compose_dashboard(display: np.ndarray, panel: np.ndarray) -> np.ndarray:
     return np.hstack((display, panel))
 
 
-def render_camera_panel(width: int, height: int, cameras: list[int | str],
+def ascii_text(text: str) -> str:
+    """OpenCV's Hershey fonts only draw ASCII."""
+    return text.encode("ascii", "replace").decode("ascii")
+
+
+def render_camera_panel(width: int, height: int, cameras: list[tuple[int | str, str]],
                         selected: int) -> np.ndarray:
     panel = np.empty((height, width, 3), np.uint8)
     panel[:] = (24, 27, 32)
@@ -1112,14 +1201,13 @@ def render_camera_panel(width: int, height: int, cameras: list[int | str],
     y = 36
     y = _panel_line(panel, "Choose camera", x, y, 0.72, (240, 244, 247), 2)
     y += 8
-    for index, device in enumerate(cameras):
-        label = linux_camera_label(device) if isinstance(device, str) else ""
+    for index, (source, label) in enumerate(cameras):
         if index == selected:
             cv2.rectangle(panel, (8, y - 19), (width - 8, y + 7), (52, 68, 80), -1)
         color = (245, 248, 250) if index == selected else (170, 180, 188)
-        y = _panel_line(panel, f"{index + 1}. {device}", x, y, 0.54, color)
-        if label:
-            y = _panel_line(panel, f"   {label}", x, y, 0.44, (135, 150, 160))
+        y = _panel_line(panel, f"{index + 1}. {ascii_text(label) or source}"[:34], x, y, 0.54, color)
+        if label and isinstance(source, str):
+            y = _panel_line(panel, f"   {source}", x, y, 0.44, (135, 150, 160))
     y = max(y + 12, height - 96)
     for line in ("A / D or arrows: change", "Enter: start", "Q: cancel"):
         y = _panel_line(panel, line, x, y, 0.5, (190, 200, 208))
@@ -1213,7 +1301,8 @@ def load_hair(log) -> ssj_face.HairOverlay | None:
         log(f"[Super Saiyan] Golden hair ready ({len(views)} view{'s' if len(views) > 1 else ''}).")
         return ssj_face.HairOverlay(views)
     if not ssj_face.hair_sources(HAIR_DIR):
-        log("[Super Saiyan] No golden hair yet: run with --ssj-hair-photos to add yours.")
+        log("[Super Saiyan] No golden hair yet: set it up in the home window (start VanishCam "
+            "from its shortcut) or run with --ssj-hair-photos.")
     return None
 
 
@@ -1230,10 +1319,12 @@ def hair_instructions() -> str:
     )
 
 
-def capture_hair_photos(args: argparse.Namespace) -> int:
-    """Guided photos (front and both sides) to turn into Super Saiyan pictures with an image model."""
-    capture = open_camera(args.camera, args.width, args.height)
-    mirrored = not args.no_mirror
+def take_hair_photos(camera: int | str | None, width: int, height: int, mirrored: bool) -> list[Path]:
+    """Guided photos (front and both sides) to turn into Super Saiyan pictures with an image model.
+
+    Closes only its own window (the home window may be open) and returns the saved photos.
+    """
+    capture = open_camera(camera, width, height)
     HAIR_DIR.mkdir(exist_ok=True)
     cv2.namedWindow(WINDOW_NAME, window_flags())
     taken: list[Path] = []
@@ -1252,7 +1343,7 @@ def capture_hair_photos(args: argparse.Namespace) -> int:
                 cv2.imshow(WINDOW_NAME, compose_dashboard(frame, panel))
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):
-                    return 0 if taken else 1
+                    return taken
                 if key == ord("s"):
                     break
                 if key == ord(" "):
@@ -1263,23 +1354,108 @@ def capture_hair_photos(args: argparse.Namespace) -> int:
                     break
     finally:
         capture.release()
-        cv2.destroyAllWindows()
+        cv2.destroyWindow(WINDOW_NAME)
         if taken:
             (HAIR_DIR / "prompt.txt").write_text(ssj_face.HAIR_PROMPT + "\n")
-            print(hair_instructions())
-    return 0
+    return taken
+
+
+def capture_hair_photos(args: argparse.Namespace) -> int:
+    taken = take_hair_photos(args.camera, args.width, args.height, not args.no_mirror)
+    if taken:
+        print(hair_instructions())
+    return 0 if taken else 1
+
+
+def hair_status() -> str:
+    pictures = len(ssj_face.hair_sources(HAIR_DIR))
+    if pictures:
+        return f"{pictures} golden picture{'s' if pictures > 1 else ''} in the folder. Check them with [H]."
+    if HAIR_DIR.is_dir() and any(HAIR_DIR.glob("photo_*.jpg")):
+        return "Photos taken. Copy the prompt, make the golden pictures, save them as ssj_front.png..."
+    return "Not set up: take the photos first."
+
+
+def check_hair_pictures() -> list[str]:
+    messages: list[str] = []
+    sources = ssj_face.hair_sources(HAIR_DIR)
+    if not sources:
+        return ["No golden pictures yet: save them in the folder as ssj_front.png, ssj_left.png, ssj_right.png."]
+    views = ssj_face.load_hair_views(HAIR_DIR, detect_face_points, messages.append)
+    messages.append(f"{len(views)} of {len(sources)} golden pictures ready."
+                    + (" The hair shows up when you go Super Saiyan." if views else ""))
+    return messages
+
+
+def home_actions(args: argparse.Namespace, cameras: list[tuple[int | str, str]]) -> home_ui.HomeActions:
+    def choose(settings: home_ui.HomeSettings):
+        sources = [source for source, _ in cameras]
+        selected = sources.index(settings.camera) if settings.camera in sources else 0
+        source = choose_camera_window(cameras, args.width, args.height, selected)
+        return None if source is None else (source, dict(cameras)[source])
+
+    def photos(settings: home_ui.HomeSettings) -> list[str]:
+        taken = take_hair_photos(settings.camera, args.width, args.height, not args.no_mirror)
+        if not taken:
+            return ["No photos taken."]
+        return [f"Saved {len(taken)} photo{'s' if len(taken) > 1 else ''}. Next: [P] copy the prompt, give it to "
+                "ChatGPT or Gemini with a photo, and save the result in the folder ([O]) as ssj_front.png."]
+
+    def prompt() -> list[str]:
+        if home_ui.copy_text(ssj_face.HAIR_PROMPT):
+            return ["Prompt copied: paste it in ChatGPT or Gemini together with one of your photos."]
+        return [f"Could not copy the prompt: it is in {HAIR_DIR / 'prompt.txt'}."]
+
+    def folder() -> list[str]:
+        if not (HAIR_DIR / "prompt.txt").exists():
+            HAIR_DIR.mkdir(exist_ok=True)
+            (HAIR_DIR / "prompt.txt").write_text(ssj_face.HAIR_PROMPT + "\n")
+        if home_ui.open_folder(HAIR_DIR):
+            return [f"Opened {HAIR_DIR}."]
+        return [f"Could not open the folder: {HAIR_DIR}"]
+
+    return home_ui.HomeActions(cameras=cameras, choose_camera=choose, take_photos=photos, copy_prompt=prompt,
+                               open_folder=folder, check_pictures=check_hair_pictures, hair_status=hair_status)
+
+
+def initial_home_settings(args: argparse.Namespace, saved: dict,
+                          cameras: list[tuple[int | str, str]]) -> home_ui.HomeSettings:
+    """Last effect and camera (by name); an explicit --camera wins."""
+    mode = saved.get("mode") if saved.get("mode") in MODES else (args.mode or DEFAULT_MODE)
+    settings = home_ui.HomeSettings(mode=mode)
+    if args.camera is not None:
+        settings.camera, settings.camera_label = args.camera, camera_label(args.camera)
+    elif cameras:
+        settings.camera, settings.camera_label = next(
+            (camera for camera in cameras if camera[1] and camera[1] == saved.get("camera")), cameras[0])
+    return settings
+
+
+def run_home(args: argparse.Namespace) -> home_ui.HomeSettings | None:
+    cameras = find_cameras()
+    settings = initial_home_settings(args, home_ui.load_settings(SETTINGS_PATH), cameras)
+    chosen = home_ui.run_home(settings, home_actions(args, cameras))
+    if chosen is not None:
+        home_ui.save_settings(SETTINGS_PATH, chosen)
+    return chosen
 
 
 def run() -> int:
     args = parse_args()
     if getattr(args, "list_cameras", False):
-        list_linux_cameras()
+        list_cameras()
         return 0
     if getattr(args, "self_test", False):
         return self_test()
     if getattr(args, "ssj_hair_photos", False):
         return capture_hair_photos(args)
-    mode = choose_mode() if getattr(args, "menu", False) else (args.mode or DEFAULT_MODE)
+    if getattr(args, "home", False):
+        chosen = run_home(args)
+        if chosen is None:
+            return 0
+        args.camera, mode = chosen.camera, chosen.mode
+    else:
+        mode = choose_mode() if getattr(args, "menu", False) else (args.mode or DEFAULT_MODE)
     if mode is None:
         return 0
     with ExitStack() as resources:

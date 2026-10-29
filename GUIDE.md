@@ -33,6 +33,13 @@ The script installs the following:
 ./vanishcam.sh --menu            # choose the mode in a window
 ```
 
+Started without options (the Desktop shortcut on Windows, the Applications menu on Ubuntu, or `./vanishcam.sh` /
+`vanishcam.bat` alone), VanishCam opens the **home window**: effect (`1`-`3`), camera (`W` or **Change**, shown only
+when there are several real webcams), Super Saiyan hair (`T` take photos, `P` copy the prompt, `O` open the folder,
+`H` check the pictures; Dragon Ball only) and **START** (`Enter`). `Q`/`ESC` quits. The last effect and camera (by
+name) are saved in `vanishcam_settings.json` in the app folder. Any option, for example `--mode naruto`, skips the
+home window as before; `--home` shows it together with other options.
+
 1. If there is more than one webcam, a window with a live preview lets you choose one (`A`/`D` or arrows, `Enter` to start, `Q` to cancel). Then the preview window (**VanishCam - Preview**) opens. **Step out of the frame**: after 4 seconds it takes a photo of the empty background. If it still sees you in the frame, it tells you in the terminal and waits 2 more seconds.
 2. Step back in and make the mode's gesture, **holding it**. You vanish with the effect.
 3. While you're gone, the call sees the background photo. To come back, **lower your hand and repeat the same gesture**: you reappear with the effect in reverse.
@@ -65,8 +72,9 @@ A stray single-frame gesture no longer makes you vanish, and after each effect y
   place. The first version used a GIF and golden-hair recolor; both were removed because they looked wrong.
 - **Eyes and eyebrows:** while transformed your irises turn teal and your eyebrows golden, using the face landmarks;
   the whites of the eyes, the lids and the skin are left alone.
-- **Golden hair:** made once from your own photos (`--ssj-hair-photos`, then an image tool of your choice, then save
-  the results as `ssj_hair/ssj_*.png`; the README has the steps). At startup VanishCam cuts the golden hair out of each
+- **Golden hair:** made once from your own photos (home window: **Take photos**, **Copy prompt**, an image tool of
+  your choice, save the results as `ssj_hair/ssj_*.png` with **Open folder**, then **Check pictures**; or
+  `--ssj-hair-photos` from a terminal; the README has the steps). At startup VanishCam cuts the golden hair out of each
   picture and caches it in `ssj_hair/.cache/`; while transformed it fits the hair on your head (position, size and tilt)
   and picks the picture closest to where you are looking. To redo it, replace the picture: the cache notices. If the
   terminal says "No golden hair found", ask the image tool for brighter, clearly yellow hair on a plain gray background.
@@ -103,7 +111,8 @@ Chrome only lists the camera once it's receiving video, so the app has to be sta
 
 ```bash
 ./vanishcam.sh --camera /dev/video2          # another webcam (list them with v4l2-ctl --list-devices)
-./vanishcam.sh --list-cameras                # show the real webcams and their names
+./vanishcam.sh --list-cameras                # show the real webcams and their names (Linux and Windows)
+./vanishcam.sh --home --width 640 --height 360  # home window with other options
 ./vanishcam.sh --width 640 --height 360      # less load on older PCs
 ./vanishcam.sh --no-mirror                   # no mirroring, not even in the preview
 ./vanishcam.sh --mirror-output               # send the mirrored image to Zoom/Meet
@@ -114,7 +123,9 @@ Chrome only lists the camera once it's receiving video, so the app has to be sta
 ```
 
 If you don't pass `--camera`, VanishCam shows the camera picker when it finds several webcams; otherwise it uses the
-first real webcam. Virtual cameras are ignored.
+first real webcam. Virtual cameras are ignored: on Windows, any camera whose name contains "virtual", "OBS", "Unity
+Video Capture", "VanishCam" or "Meta Quest". On Windows `--camera N` is the number shown by `--list-cameras`; if only
+virtual cameras are found, VanishCam lists them and stops instead of reading one of them.
 
 ## Troubleshooting
 

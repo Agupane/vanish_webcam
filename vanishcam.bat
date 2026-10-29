@@ -8,6 +8,9 @@ if not exist "%APP%.venv\Scripts\python.exe" (
   pause
   exit /b 1
 )
-"%APP%.venv\Scripts\python.exe" "%APP%vanish_cam.py" --virtual-camera %*
+rem Without options it opens the home window (effect, camera, Super Saiyan hair).
+set "HOME_WINDOW="
+if "%~1"=="" set "HOME_WINDOW=--home"
+"%APP%.venv\Scripts\python.exe" "%APP%vanish_cam.py" --virtual-camera %HOME_WINDOW% %*
 if errorlevel 1 pause
 exit /b %errorlevel%

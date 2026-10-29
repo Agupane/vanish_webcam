@@ -17,6 +17,7 @@ Algorithm inventory, measured costs, hot spots and the optimization backlog: [AL
 | `dragonball_effect.py` | Dragon Ball mode (default): Instant Transmission pose (two fingers on forehead), teleport render, generated sound |
 | `naruto_effect.py` | Naruto mode: joined palms, smoke + falling log, reverse effect to reappear |
 | `super_saiyan_effect.py` | Super Saiyan (inside Dragon Ball): charge-ki pose, `PowerState`, procedural `AuraRenderer` (surrounds the silhouette, never paints the person), synthesized sounds |
+| `home_ui.py` | Home window (OpenCV-drawn): effect, camera, Super Saiyan hair actions, START; `run_home(settings, actions)` with callbacks from `vanish_cam`; settings file and clipboard/folder helpers |
 | `vanish_sound.py` | Plays an effect sound (pygame, or `ffplay` fallback); `play(loops, fade_ms)`, `stop(fade_ms)`, `set_volume` |
 | `ssj_face.py` | Super Saiyan face: teal irises, golden brows, import of the user's golden hair pictures (`ssj_hair/ssj_*.png`) and `HairOverlay`, which fits the hair on the live face |
 | `tools/aura_preview.py` | Renders the Super Saiyan aura on a synthetic scene (light/dark wall, chair) for tuning without a camera |
@@ -54,6 +55,12 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
   held 1.5 s with its own `GestureHold`. The effect is a procedural `AuraRenderer` around the person silhouette
   (distance transform + rising flames + sparks, half resolution, masked out inside the person): it never recolors the
   hair or paints the body. Teleporting while transformed keeps the transformation state and pauses/resumes the hum.
+- **Home window:** the launchers pass `--home` when started without options; `run()` shows `home_ui.run_home` and
+  then `run_camera` with the chosen mode and camera. Actions are callbacks (`home_actions`), so `home_ui` has no
+  webcam or MediaPipe code. The camera is remembered by name in `vanishcam_settings.json` (gitignored).
+- **Cameras:** `find_cameras` returns `[(source, label)]`: Linux from sysfs (v4l2loopback skipped), Windows from
+  `pygrabber` in DirectShow order (= OpenCV index with `CAP_DSHOW`), hiding names in `VIRTUAL_CAMERA_WORDS` (OBS
+  Virtual Camera is a DirectShow camera too: never read our own output); macOS has no picker yet.
 - **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear (restart setup while calibrating), `S` Super Saiyan on/off (Dragon Ball), `SPACE` recalibrate, `P` pause/resume, `F` fullscreen, `Q`/`ESC` quit.
 - **Guided setup:** during calibration the preview outlines the detected person (`draw_setup_marks`, HUD only) and the side panel says whether to step out; `P` freezes the loop and `R` restarts calibration.
 - **Mirroring:** the preview is mirrored; the virtual camera gets the unmirrored image unless `--mirror-output`.
@@ -72,7 +79,8 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
 - MediaPipe VIDEO-mode tasks need strictly increasing timestamps: run each task at most once per frame.
 - Keep the loop testable: patchable seams are `gesture_active`, `person_mask`, `person_in_frame`, `create_tasks`,
   `open_camera`, `open_virtual_camera`, `VanishSound`, `teleport_sound_path`, `power_active`, `ssj_sound_paths`,
-  `load_hair`, `detect_face_points`, `draw_setup_marks`, `render_status_panel` and `compose_dashboard`.
+  `load_hair`, `detect_face_points`, `draw_setup_marks`, `render_status_panel`, `compose_dashboard`, `windows_camera_names`, `find_cameras` and
+  `take_hair_photos` (closes only its own window: the home window may be open).
 - The Super Saiyan hair is never generated or downloaded by VanishCam: the user makes it with an image tool of their
   choice from photos taken with `--ssj-hair-photos` (owner decision, 2026-10-29). Do not add calls to image APIs.
 - Super Saiyan sounds are synthesized too (`write_charge_sound`, `write_transform_sound`, `write_aura_hum`);

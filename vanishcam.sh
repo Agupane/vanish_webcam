@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Starts VanishCam sending the video to the virtual camera (v4l2loopback on Linux, OBS on macOS).
 # Accepts the same options as vanish_cam.py, e.g. --mode naruto or --camera /dev/video2.
+# Without options it opens the home window (effect, camera, Super Saiyan hair).
 # On Linux, --call-audio creates the "VanishCam-Mic" microphone (your microphone + the effects).
 set -euo pipefail
 
@@ -26,6 +27,11 @@ for arg in "$@"; do
     args+=("$arg")
   fi
 done
+
+# Started without options (menu entry, desktop shortcut): open the home window.
+if [[ $# -eq 0 ]]; then
+  args=(--home)
+fi
 
 if [[ $call_audio == true && $audio_device == true ]]; then
   echo "[VanishCam] Use either --call-audio (Linux) or --audio-device, not both." >&2
