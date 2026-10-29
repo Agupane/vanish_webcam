@@ -17,14 +17,14 @@ POWER_DOWN_SECONDS = 0.6
 HAIR_INTERVAL = 0.1
 HAIR_HOLD_SECONDS = 0.3
 AURA_SCALE = 0.5
-AURA_RADIUS = 16.0  # A mezza risoluzione.
-HAIR_CLASS = 1  # selfie_multiclass_256x256: 0 sfondo, 1 capelli, 2 pelle, 3 viso, 4 vestiti, 5 altro.
+AURA_RADIUS = 16.0  # At half resolution.
+HAIR_CLASS = 1  # selfie_multiclass_256x256: 0 background, 1 hair, 2 body skin, 3 face skin, 4 clothes, 5 other.
 
 # Face Landmarker.
 NOSE, CHIN, FOREHEAD_TOP = 1, 152, 10
 FACE_LEFT, FACE_RIGHT = 234, 454
 
-# BGR: dal bordo arancione al nucleo quasi bianco.
+# BGR: from the orange edge to the almost-white core.
 AURA_STOPS = ((0.0, (0, 0, 0)), (0.35, (0, 140, 255)), (0.7, (0, 215, 255)), (1.0, (200, 255, 255)))
 GOLD_STOPS = ((0.0, (10, 70, 140)), (0.55, (30, 190, 255)), (1.0, (170, 250, 255)))
 
@@ -47,7 +47,7 @@ def _points(landmarks, width: int, height: int) -> np.ndarray:
 
 
 def hand_tension(hand: np.ndarray) -> int:
-    """Quante dita (indice..mignolo) sono chiuse o tese verso il palmo."""
+    """How many fingers (index..pinky) are curled or bent towards the palm."""
     curled = 0
     for base in (5, 9, 13, 17):
         finger = hand[base:base + 4]
@@ -64,7 +64,7 @@ def hand_tension(hand: np.ndarray) -> int:
 
 
 def charge_pose(hands: list[np.ndarray], face: np.ndarray, width: int, height: int) -> bool:
-    """Due pugni all'altezza del petto, uno per lato del naso (la posa di caricare il ki)."""
+    """Two fists at chest height, one on each side of the nose (the ki-charging pose)."""
     if len(hands) < 2 or face.shape[0] <= max(FACE_RIGHT, CHIN):
         return False
     scale = float(np.linalg.norm(face[FACE_RIGHT] - face[FACE_LEFT]))
@@ -131,7 +131,7 @@ def hair_from_confidence(confidence: np.ndarray, box: tuple[int, int, int, int],
 
 
 def recolor_hair(frame: np.ndarray, hair: np.ndarray | None, amount: float) -> np.ndarray:
-    """Capelli dorati mantenendo trama e luce (mappa a gradiente sulla luminanza)."""
+    """Golden hair that keeps texture and lighting (gradient map on luminance)."""
     if hair is None or amount <= 0.0:
         return frame
     alpha_full = hair * float(min(1.0, amount))
@@ -162,7 +162,7 @@ def recolor_hair(frame: np.ndarray, hair: np.ndarray | None, amount: float) -> n
 
 
 class HairTracker:
-    """Segmenta i capelli su un ritaglio della testa (modello multiclasse, modalità IMAGE)."""
+    """Segment the hair on a head crop (multiclass model, IMAGE mode)."""
 
     def __init__(self, segmenter):
         self.segmenter = segmenter
@@ -207,13 +207,13 @@ class HairTracker:
 # ---------- aura ----------
 
 class AuraRenderer:
-    """Aura gialla a fiamme verso l'alto, con impulso e scintille, a mezza risoluzione."""
+    """Yellow aura with upward flames, pulse and sparks, at half resolution."""
 
     def __init__(self, seed: int = 77, sparks: int = 30):
         rng = np.random.default_rng(seed)
         coarse = rng.random((16, 64), dtype=np.float32)
         fine = rng.random((64, 128), dtype=np.float32)
-        # Più alto che largo: lingue di fuoco verticali.
+        # Taller than wide: vertical tongues of fire.
         noise = (cv2.resize(coarse, (256, 256), interpolation=cv2.INTER_CUBIC) * 0.65
                  + cv2.resize(fine, (256, 256), interpolation=cv2.INTER_CUBIC) * 0.35)
         self.noise = np.clip(noise, 0.0, 1.0)
@@ -242,7 +242,7 @@ class AuraRenderer:
         distance = cv2.distanceTransform(outside, cv2.DIST_L2, 3)
         pulse = 1.0 + 0.15 * math.sin(2 * math.pi * 3.0 * t)
         ring = np.exp(-distance / (AURA_RADIUS * radius_scale * pulse)).astype(np.float32)
-        # Le fiamme salgono: ogni riga prende luce da quelle sotto.
+        # The flames rise: each row takes light from the rows below.
         rising = cv2.filter2D(ring, -1, self.upward, anchor=(0, 0), borderType=cv2.BORDER_REPLICATE)
         ring = np.maximum(ring, rising * 1.3)
 
@@ -384,7 +384,7 @@ def _band_noise(size: int, seed: int, short: int = 4, long: int = 40) -> np.ndar
 
 
 def write_charge_sound(path: Path, sample_rate: int = 44100) -> Path:
-    """Ruggito che cresce per tutta la carica (una sola volta, non in loop)."""
+    """Roar that builds over the whole charge (plays once, not looped)."""
     duration = CHARGE_SECONDS + 0.1
     t = np.arange(int(sample_rate * duration)) / sample_rate
     progress = t / duration
@@ -404,7 +404,7 @@ def write_charge_sound(path: Path, sample_rate: int = 44100) -> Path:
 
 
 def write_transform_sound(path: Path, sample_rate: int = 44100) -> Path:
-    """Esplosione: colpo grave, soffio, crepitio e sweep discendente."""
+    """Explosion: low thump, whoosh, crackle and a falling sweep."""
     duration = 1.2
     t = np.arange(int(sample_rate * duration)) / sample_rate
     boom = np.sin(2 * math.pi * np.cumsum(60.0 - 25.0 * t / duration) / sample_rate) * np.exp(-6.0 * t)
@@ -419,7 +419,7 @@ def write_transform_sound(path: Path, sample_rate: int = 44100) -> Path:
 
 
 def write_aura_hum(path: Path, sample_rate: int = 44100) -> Path:
-    """Ronzio di 2 s che si ripete senza tagli: cicli interi e rumore filtrato in modo circolare."""
+    """2 s hum that loops seamlessly: whole cycles and circularly filtered noise."""
     duration = 2.0
     size = int(sample_rate * duration)
     t = np.arange(size) / sample_rate

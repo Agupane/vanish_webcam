@@ -122,7 +122,7 @@ class DragonBallLoopTests(unittest.TestCase):
         np.testing.assert_array_equal(shown[75], frames[0])  # Gone: the empty room.
         np.testing.assert_array_equal(shown[108], frames[108])  # Back.
         self.assertEqual(sound.play.call_count, 2)
-        self.assertTrue(any("Mantené los dedos" in line for line in printed))
+        self.assertTrue(any("Keep your fingers on your forehead" in line for line in printed))
 
     def test_a_short_touch_does_not_teleport(self):
         frames, shown, _, sound, _ = run_loop(mode="dragonball", gesture=lambda t: 5.0 <= t < 5.6,

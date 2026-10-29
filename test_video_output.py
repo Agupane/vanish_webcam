@@ -82,7 +82,7 @@ def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
         destroy = mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
         mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: displayed.append(frame.copy())))
         mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=wait_key))
-        mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay vietato")))
+        mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay forbidden")))
         mocks.enter_context(patch("builtins.print", side_effect=lambda *a, **k: printed.append(" ".join(map(str, a)))))
         if send_error is None:
             assert app.run() == 0
@@ -133,7 +133,7 @@ class VirtualCameraTests(unittest.TestCase):
     def test_send_preserves_colors_and_handles_noncontiguous_frames(self):
         camera = Mock(width=40, height=24)
         frame = np.zeros((24, 40, 3), np.uint8)
-        frame[:] = (10, 70, 200)  # BGR: non scambiare rosso e blu.
+        frame[:] = (10, 70, 200)  # BGR: do not swap red and blue.
         app.send_virtual_frame(camera, frame[:, ::-1])
         sent = camera.send.call_args.args[0]
         self.assertTrue(sent.flags.c_contiguous)
@@ -180,8 +180,8 @@ class VideoLoopTests(unittest.TestCase):
     def test_calibration_waits_while_someone_is_in_frame(self):
         frames, shown, _, _, printed = run_loop(
             person=lambda t: t < 3.0, seconds=8.0, gesture=lambda t: False)
-        self.assertTrue(any("Todavía hay alguien" in line for line in printed))
-        self.assertTrue(any("Fondo listo" in line for line in printed))
+        self.assertTrue(any("Someone is still in the frame" in line for line in printed))
+        self.assertTrue(any("Background ready" in line for line in printed))
 
     def test_virtual_camera_is_not_mirrored_but_preview_is(self):
         _, shown, camera, _, _ = run_loop(no_mirror=False, seconds=5.0)

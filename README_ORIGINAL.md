@@ -1,7 +1,7 @@
 # VanishCam — webcam disappearance effects
 
 > **Original README of [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam), kept for reference.**
-> This fork's setup and usage are in [README.md](README.md). The `.exe` download linked below is the upstream author's build, not built from this repo.
+> This fork's setup is in [README.md](README.md) and its usage guide in [GUIDE.md](GUIDE.md); its preview window is now called **VanishCam - Preview** (formerly *Webcam - Anteprima*). The `.exe` download linked below is the upstream author's build, not built from this repo.
 
 Video is processed on your computer. It is neither recorded nor sent to a server. The preview window and virtual camera show only the video and effects, without overlaid menus, instructions, or text.
 

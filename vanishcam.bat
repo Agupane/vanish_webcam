@@ -1,10 +1,10 @@
 @echo off
-rem Arranca VanishCam mandando el video a la camara virtual de OBS.
-rem Acepta las mismas opciones que vanish_cam.py, por ejemplo --mode naruto.
+rem Starts VanishCam sending the video to the OBS virtual camera.
+rem Accepts the same options as vanish_cam.py, for example --mode naruto.
 setlocal
 set "APP=%~dp0"
 if not exist "%APP%.venv\Scripts\python.exe" (
-  echo [VanishCam] Falta instalar: corre install.ps1 ^(ver README^).
+  echo [VanishCam] Not installed yet: run install.ps1 ^(see README^).
   pause
   exit /b 1
 )

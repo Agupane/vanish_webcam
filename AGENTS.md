@@ -6,7 +6,7 @@ Context for coding agents working on this repo.
 
 VanishCam: a local webcam app that makes the person "vanish" with an effect when they make a hand gesture, and sends the
 result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_webcam` (remote `upstream`); this fork is
-`Agupane/vanish_webcam` (remote `origin`, branch `main`). User-facing docs in Spanish: `README.md` (install) and `README_UBUNTU.md` (usage guide).
+`Agupane/vanish_webcam` (remote `origin`, branch `main`). User-facing docs: `README.md` (install) and `GUIDE.md` (usage guide).
 
 ## Layout
 
@@ -21,7 +21,7 @@ result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_web
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
 | `install-ubuntu.sh` | apt packages, v4l2loopback (falls back to building a pinned upstream commit with DKMS), venv, models, `.desktop` |
 | `install.ps1`, `vanishcam.bat` | Windows installer (uv + winget OBS + desktop shortcut) and launcher |
-| `vanishcam.sh` | Launcher for Linux (v4l2loopback device named VanishCam; `--sonido-en-llamada` builds a PulseAudio/PipeWire virtual mic) and macOS (OBS) |
+| `vanishcam.sh` | Launcher for Linux (v4l2loopback device named VanishCam; `--call-audio` builds a PulseAudio/PipeWire virtual mic) and macOS (OBS) |
 | `AVVIA_*.bat` | Upstream launcher names, now delegating to `vanishcam.bat` |
 | `VanishCam.spec`, `BUILD_WINDOWS.bat` | Upstream PyInstaller build; not maintained here |
 | `README_ORIGINAL.md` | Upstream README (English), kept for reference |
@@ -51,7 +51,7 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
 ## Rules
 
 - Never draw text or UI on the video (preview or virtual camera); tests patch `cv2.putText` to fail. Messages go to the terminal.
-- Terminal messages and docs are in Spanish (rioplatense). Code comments are a mix of Italian (upstream) and English; keep whichever the surrounding code uses.
+- Everything is in English: terminal messages, docs, code comments, docstrings and tests.
 - Do not add copyrighted anime audio or frames. The teleport sound is synthesized in `write_teleport_sound`; a user may drop their own `assets/teleport.MP3`, which takes precedence.
 - MediaPipe VIDEO-mode tasks need strictly increasing timestamps: run each task at most once per frame.
 - Keep the loop testable: patchable seams are `gesture_active`, `person_mask`, `person_in_frame`, `create_tasks`,

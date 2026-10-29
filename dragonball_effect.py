@@ -12,16 +12,16 @@ import numpy as np
 
 HOLD_SECONDS = 1.0
 EFFECT_SECONDS = 0.95
-# Momento in cui la persona sparisce del tutto; le linee restano fino alla fine.
+# Moment when the person is fully gone; the lines stay until the end.
 VANISH_AT = 0.42
 LINES_FULL_AT = 0.30
 
-# Face Landmarker: parte alta della fronte, centro fronte, tra le sopracciglia, lati del viso.
+# Face Landmarker: top of the forehead, forehead center, between the eyebrows, sides of the face.
 FOREHEAD_TOP, FOREHEAD_CENTER, BROWS = 10, 151, 9
 FACE_LEFT, FACE_RIGHT = 234, 454
 
-LINE_COLOR = np.array((255, 250, 236), dtype=np.float32)  # BGR, bianco caldo.
-GLOW_COLOR = np.array((255, 236, 170), dtype=np.float32)  # BGR, azzurro chiaro.
+LINE_COLOR = np.array((255, 250, 236), dtype=np.float32)  # BGR, warm white.
+GLOW_COLOR = np.array((255, 236, 170), dtype=np.float32)  # BGR, light blue.
 
 
 def _image_points(landmarks, width: int, height: int) -> np.ndarray:
@@ -29,7 +29,7 @@ def _image_points(landmarks, width: int, height: int) -> np.ndarray:
 
 
 def _finger(hand: np.ndarray, base: int) -> tuple[float, float, bool]:
-    """Lunghezza, rettilineità e se il dito è disteso (punta lontana dal polso)."""
+    """Length, straightness and whether the finger is extended (tip far from the wrist)."""
     finger = hand[base:base + 4]
     length = float(np.linalg.norm(np.diff(finger, axis=0), axis=1).sum())
     if length < 1e-3:
@@ -41,10 +41,10 @@ def _finger(hand: np.ndarray, base: int) -> tuple[float, float, bool]:
 
 
 def two_finger_tip(hand: np.ndarray) -> np.ndarray | None:
-    """Punto medio delle punte di indice e medio se sono distesi e uniti.
+    """Midpoint of the index and middle fingertips if they are extended and together.
 
-    Anulare e mignolo non devono essere distesi: una mano aperta sulla fronte
-    (facepalm) non deve far partire il teletrasporto.
+    Ring and pinky must not be extended: an open hand on the forehead
+    (facepalm) must not trigger the teleport.
     """
     if hand.shape != (21, 2) or not np.isfinite(hand).all():
         return None
@@ -79,7 +79,7 @@ def touching_forehead(tip: np.ndarray, face: np.ndarray) -> bool:
 
 
 def instant_transmission(hands, faces, width: int, height: int) -> bool:
-    """Indice e medio uniti appoggiati sulla fronte (la posa del teletrasporto)."""
+    """Index and middle fingers together resting on the forehead (the teleport pose)."""
     if not hands or not faces:
         return False
     face = _image_points(faces[0], width, height)
@@ -93,14 +93,14 @@ def instant_transmission(hands, faces, width: int, height: int) -> bool:
 
 
 class InstantTransmissionDetector:
-    """Hand + Face Landmarker in modalità video sullo stesso fotogramma."""
+    """Hand + Face Landmarker in video mode on the same frame."""
 
     def __init__(self, hands, faces):
         self.hands = hands
         self.faces = faces
         self.last_hand_count = 0
         self.last_face_found = False
-        # L'ultima inferenza, riusata dalla trasformazione Super Saiyan senza rifarla.
+        # The latest inference, reused by the Super Saiyan transformation without rerunning it.
         self.last_hands: list = []
         self.last_faces: list = []
         self.last_size = (0, 0)
@@ -124,7 +124,7 @@ class InstantTransmissionDetector:
 
 
 def person_alpha(age: float) -> float:
-    """Opacità della persona: resta, sfarfalla e sparisce entro VANISH_AT."""
+    """Person opacity: stays, flickers and is gone by VANISH_AT."""
     if age <= 0.25:
         return 1.0
     if age >= VANISH_AT:
@@ -145,7 +145,7 @@ def lines_intensity(age: float) -> float:
 
 
 def speed_lines(region: np.ndarray, age: float, seed: int = 4242) -> np.ndarray:
-    """Linee verticali in stile fumetto che scorrono dentro la silhouette."""
+    """Comic-style vertical lines scrolling inside the silhouette."""
     height, width = region.shape
     layer = np.zeros((height, width), dtype=np.uint8)
     rng = np.random.default_rng(seed)
@@ -156,7 +156,7 @@ def speed_lines(region: np.ndarray, age: float, seed: int = 4242) -> np.ndarray:
         speed = rng.uniform(2.5, 5.0)
         offset = rng.uniform(0, height + length)
         thickness = int(rng.choice((1, 1, 2, 3)))
-        # Scorrono verso l'alto e rientrano dal basso.
+        # They scroll upwards and wrap around from the bottom.
         top = int((offset - age * speed * height) % (height + length)) - length
         cv2.line(layer, (x, top), (x, top + length), 255, thickness, cv2.LINE_AA)
     lines = layer.astype(np.float32) / 255.0
@@ -166,7 +166,7 @@ def speed_lines(region: np.ndarray, age: float, seed: int = 4242) -> np.ndarray:
 
 def render_teleport(frame: np.ndarray, background: np.ndarray, mask: np.ndarray,
                     age: float) -> np.ndarray:
-    """Teletrasporto in uscita. Per il ritorno si usa age = EFFECT_SECONDS - tempo."""
+    """Outgoing teleport. For the return, use age = EFFECT_SECONDS - elapsed time."""
     if age >= EFFECT_SECONDS or mask is None:
         return background.copy()
     points = cv2.findNonZero((mask > 0.2).astype(np.uint8))
@@ -187,7 +187,7 @@ def render_teleport(frame: np.ndarray, background: np.ndarray, mask: np.ndarray,
         + background[area].astype(np.float32) * (1.0 - person[:, :, None])
     )
     if lines_level > 0:
-        # La persona si illumina mentre le linee si intensificano.
+        # The person lights up as the lines intensify.
         glow = (person * lines_level * 0.35)[:, :, None]
         output = output * (1.0 - glow) + GLOW_COLOR * glow
         region = cv2.GaussianBlur(mask[area], (0, 0), sigmaX=6.0, sigmaY=6.0)
@@ -198,7 +198,7 @@ def render_teleport(frame: np.ndarray, background: np.ndarray, mask: np.ndarray,
 
 
 def write_teleport_sound(path: Path, sample_rate: int = 44100) -> Path:
-    """Genera un breve "shwip" (sweep + soffio) senza usare audio di terzi."""
+    """Generate a short "shwip" (sweep + whoosh) without third-party audio."""
     duration = 0.5
     t = np.arange(int(sample_rate * duration), dtype=np.float64) / sample_rate
     frequency = 500.0 + 2600.0 * (t / duration) ** 1.5

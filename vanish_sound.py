@@ -14,7 +14,7 @@ SOUND_PATH = Path(__file__).resolve().parent / "assets" / "vanish.MP3"
 class VanishSound:
     def __init__(self, path: Path = SOUND_PATH):
         if not path.is_file():
-            raise RuntimeError(f"No encuentro el audio: {path}")
+            raise RuntimeError(f"Audio file not found: {path}")
         self.path = path
 
         os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
@@ -25,7 +25,7 @@ class VanishSound:
         except ImportError:
             self.ffplay = shutil.which("ffplay")
             if self.ffplay is None:
-                raise RuntimeError("Para reproducir el audio instalá pygame o ffplay.")
+                raise RuntimeError("Install pygame or ffplay to play audio.")
             return
 
         self.mixer = mixer
@@ -37,7 +37,7 @@ class VanishSound:
         except Exception as error:
             if self.owns_mixer:
                 mixer.quit()
-            raise RuntimeError(f"No pude abrir el audio: {error}") from error
+            raise RuntimeError(f"Could not open the audio: {error}") from error
 
     def play(self, loops: int = 0, fade_ms: int = 0) -> None:
         """Play from the start; loops=-1 repeats until stop()."""
@@ -54,11 +54,11 @@ class VanishSound:
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
             except OSError as error:
-                raise RuntimeError(f"No pude reproducir el audio: {error}") from error
+                raise RuntimeError(f"Could not play the audio: {error}") from error
             return
         self.sound.stop()
         if self.sound.play(loops=loops, fade_ms=fade_ms) is None:
-            raise RuntimeError("No pude reproducir el audio: no hay canales libres.")
+            raise RuntimeError("Could not play the audio: no free channels.")
 
     def stop(self, fade_ms: int = 0) -> None:
         if self.ffplay is not None:

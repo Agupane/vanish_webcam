@@ -1,21 +1,21 @@
 # VanishCam
 
-Efectos de desaparición para tu webcam en Zoom, Google Meet o cualquier app de videollamadas. Hacés un gesto y desaparecés de la imagen; repetís el gesto y volvés.
+Disappearance effects for your webcam in Zoom, Google Meet or any video call app. Make a gesture and you vanish from the picture; repeat the gesture and you're back.
 
-El modo por defecto es **Dragon Ball**: apoyás índice y medio juntos en la frente durante 1 segundo (la Teletransportación Instantánea) y te vas con líneas de cómic y un destello. También están el modo **Normal** (V con dos dedos, te disolvés) y el modo **Naruto** (palmas juntas, humo y un tronco).
+The default mode is **Dragon Ball**: rest your index and middle fingers together on your forehead for 1 second (Instant Transmission) and you're gone with comic speed lines and a flash. There is also **Normal** mode (two-finger V, you dissolve) and **Naruto** mode (palms together, smoke and a log).
 
-Todo se procesa en tu computadora: el video no se graba ni se manda a ningún servidor. Es un fork de [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam) (README original en [README_ORIGINAL.md](README_ORIGINAL.md)).
+Everything is processed on your computer: the video is not recorded or sent to any server. This is a fork of [Nicovic17/vanish_webcam](https://github.com/Nicovic17/vanish_webcam) (original README in [README_ORIGINAL.md](README_ORIGINAL.md)).
 
-## Instalación
+## Installation
 
-| Sistema | Soporte | Cámara virtual |
+| System | Support | Virtual camera |
 |---|---|---|
-| **Ubuntu 22.04 / 24.04** (y Debian) | Completo | v4l2loopback (la instala el instalador) |
-| **Windows 10 / 11** | Completo | OBS Studio (lo instala el instalador) |
-| **macOS con chip Apple** (M1 o posterior) | Completo | OBS Studio 30 o posterior |
-| **macOS con Intel** | Experimental: usa versiones viejas de MediaPipe | OBS Studio 30 o posterior |
+| **Ubuntu 22.04 / 24.04** (and Debian) | Full | v4l2loopback (installed by the installer) |
+| **Windows 10 / 11** | Full | OBS Studio (installed by the installer) |
+| **macOS on Apple silicon** (M1 or later) | Full | OBS Studio 30 or later |
+| **macOS on Intel** | Experimental: uses older MediaPipe versions | OBS Studio 30 or later |
 
-Los instaladores bajan unos 300 MB (Python, librerías y modelos) y no tocan el Python de tu sistema.
+The installers download about 300 MB (Python, libraries and models) and do not touch your system Python.
 
 ### Ubuntu / Linux
 
@@ -23,7 +23,7 @@ Los instaladores bajan unos 300 MB (Python, librerías y modelos) y no tocan el 
 curl -LsSf https://raw.githubusercontent.com/Agupane/vanish_webcam/main/install.sh | bash
 ```
 
-O, si preferís revisar el código antes:
+Or, if you'd rather review the code first:
 
 ```bash
 git clone https://github.com/Agupane/vanish_webcam.git ~/VanishCam
@@ -31,83 +31,83 @@ cd ~/VanishCam
 ./install.sh
 ```
 
-Te pide la contraseña de `sudo` para instalar los paquetes y la cámara virtual **VanishCam**. Si el paquete de la cámara virtual de tu Ubuntu no compila para tu kernel (pasa en 22.04 con kernels 6.8), el instalador compila la versión oficial.
+It asks for your `sudo` password to install the packages and the **VanishCam** virtual camera. If your Ubuntu's virtual camera package doesn't build for your kernel (this happens on 22.04 with 6.8 kernels), the installer builds the official version.
 
-**Secure Boot:** si `apt` te pide una contraseña para firmar el módulo, elegí una y reiniciá. Al arrancar aparece una pantalla azul (MOK): elegí *Enroll MOK* → *Continue*, escribí esa contraseña y reiniciá. Después volvé a correr el instalador.
+**Secure Boot:** if `apt` asks for a password to sign the module, pick one and reboot. On startup a blue screen (MOK) appears: choose *Enroll MOK* → *Continue*, type that password and reboot. Then run the installer again.
 
 ### Windows
 
-Abrí **PowerShell** (no hace falta como administrador) y pegá:
+Open **PowerShell** (no need to run it as administrator) and paste:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Agupane/vanish_webcam/main/install.ps1 | iex"
 ```
 
-O bajá el repo (**Code → Download ZIP**), descomprimilo y hacé clic derecho en `install.ps1` → **Ejecutar con PowerShell**.
+Or download the repo (**Code → Download ZIP**), unzip it, right-click `install.ps1` → **Run with PowerShell**.
 
-El instalador deja todo en `%USERPROFILE%\VanishCam`, instala **OBS Studio** con `winget` si no lo tenés (puede pedir permiso de administrador) y crea el acceso **VanishCam** en el Escritorio.
+The installer puts everything in `%USERPROFILE%\VanishCam`, installs **OBS Studio** with `winget` if you don't have it (it may ask for administrator permission) and creates a **VanishCam** shortcut on the Desktop.
 
 ### macOS
 
-Abrí la **Terminal** y pegá:
+Open **Terminal** and paste:
 
 ```bash
 curl -LsSf https://raw.githubusercontent.com/Agupane/vanish_webcam/main/install.sh | bash
 ```
 
-Si tenés [Homebrew](https://brew.sh), el instalador instala OBS Studio; si no, te abre la página para bajarlo. Después hay que **activar una sola vez la cámara virtual de OBS**:
+If you have [Homebrew](https://brew.sh), the installer installs OBS Studio; otherwise it opens the download page. Then you need to **enable OBS's virtual camera once**:
 
-1. Abrí OBS Studio.
-2. Tocá **Iniciar cámara virtual** y aceptá el permiso que pide macOS (Ajustes del Sistema → General → Ítems de inicio y extensiones → Extensiones de cámara).
-3. Tocá **Detener cámara virtual** y cerrá OBS.
+1. Open OBS Studio.
+2. Click **Start Virtual Camera** and accept the permission macOS asks for (System Settings → General → Login Items & Extensions → Camera Extensions).
+3. Click **Stop Virtual Camera** and quit OBS.
 
-La primera vez que abras VanishCam, macOS pide permiso para que la Terminal use la cámara: aceptalo.
+The first time you open VanishCam, macOS asks for permission for Terminal to use the camera: allow it.
 
-## Uso
+## Usage
 
-| Sistema | Cómo abrirlo |
+| System | How to open it |
 |---|---|
-| Ubuntu | Menú de aplicaciones → **VanishCam**, o `~/VanishCam/vanishcam.sh` |
-| Windows | **VanishCam** en el Escritorio, o `vanishcam.bat` |
-| macOS | **VanishCam.command** en el Escritorio, o `~/VanishCam/vanishcam.sh` |
+| Ubuntu | Applications menu → **VanishCam**, or `~/VanishCam/vanishcam.sh` |
+| Windows | **VanishCam** on the Desktop, or `vanishcam.bat` |
+| macOS | **VanishCam.command** on the Desktop, or `~/VanishCam/vanishcam.sh` |
 
-1. Se abre una ventana con tu cámara. **Salí del cuadro**: a los 4 segundos saca la foto del fondo vacío (la terminal te avisa).
-2. Volvé a entrar y hacé el gesto **sosteniéndolo**: desaparecés.
-3. Para volver, **bajá la mano y repetí el gesto**.
+1. A window with your camera opens. **Step out of the frame**: after 4 seconds it takes a photo of the empty background (the terminal tells you).
+2. Step back in and make the gesture, **holding it**: you vanish.
+3. To come back, **lower your hand and repeat the gesture**.
 
-| Modo | Gesto | Sostener |
+| Mode | Gesture | Hold |
 |---|---|---|
-| **Dragon Ball** (por defecto) | Índice y medio juntos, estirados, apoyados en la frente | 1 s |
-| **Normal** (`--mode normal`) | V con índice y medio | 0,3 s |
-| **Naruto** (`--mode naruto`) | Palmas juntas frente a la cámara | 0,3 s |
+| **Dragon Ball** (default) | Index and middle fingers together, straight, resting on your forehead | 1 s |
+| **Normal** (`--mode normal`) | V with index and middle fingers | 0.3 s |
+| **Naruto** (`--mode naruto`) | Palms together in front of the camera | 0.3 s |
 
-Teclas (con la ventana de VanishCam activa): `V` desaparecer, `R` reaparecer, `ESPACIO` foto del fondo de nuevo, `F` pantalla completa, `Q` salir.
+Keys (with the VanishCam window focused): `V` vanish, `R` reappear, `SPACE` retake the background photo, `F` fullscreen, `Q` quit.
 
-**En Zoom o Meet**, primero abrí VanishCam y después elegí la cámara en la configuración de video:
+**In Zoom or Meet**, open VanishCam first and then pick the camera in the video settings:
 
 - Ubuntu: **VanishCam**.
-- Windows y macOS: **OBS Virtual Camera**. Si OBS está abierto, no actives su cámara virtual: la usa VanishCam.
+- Windows and macOS: **OBS Virtual Camera**. If OBS is open, don't start its virtual camera: VanishCam uses it.
 
-Si no aparece, cerrá Zoom del todo (o recargá Meet) y volvé a abrirlo.
+If it doesn't show up, quit Zoom completely (or reload Meet) and open it again.
 
-La guía completa (opciones, efectos, problemas comunes) está en [README_UBUNTU.md](README_UBUNTU.md); casi todo vale igual para Windows y macOS.
+The full guide (options, effects, troubleshooting) is in [GUIDE.md](GUIDE.md); almost all of it applies to Windows and macOS too.
 
-## Sonido de los efectos en la llamada
+## Effect sounds in the call
 
-Los sonidos de los efectos suenan en **tus parlantes**: la cámara virtual lleva solo video. Los demás los escuchan si los levanta tu micrófono, y la supresión de ruido de Zoom/Meet suele borrarlos.
+Effect sounds play through **your speakers**: the virtual camera carries video only. Others hear them only if your microphone picks them up, and Zoom/Meet noise suppression often removes them.
 
-- **Ubuntu:** arrancá con `./vanishcam.sh --sonido-en-llamada`. Crea un micrófono virtual **VanishCam-Microfono** que mezcla tu micrófono real con los efectos (y los seguís escuchando vos). En Zoom/Meet elegí ese micrófono y bajá la supresión de ruido (Zoom: Configuración → Audio → Supresión de ruido de fondo: Baja, o activá "Sonido original para músicos"). Al cerrar VanishCam se desarma solo.
-- **Windows y macOS:** todavía no está automatizado. Hace falta un cable de audio virtual ([VB-Cable](https://vb-audio.com/Cable/) en Windows, [BlackHole](https://github.com/ExistentialAudio/BlackHole) en macOS) y que VanishCam toque los efectos ahí; está en la lista de pendientes.
+- **Ubuntu:** start with `./vanishcam.sh --call-audio`. It creates a virtual microphone **VanishCam-Mic** that mixes your real microphone with the effects (and you still hear them yourself). In Zoom/Meet pick that microphone and lower noise suppression (Zoom: Settings → Audio → Suppress background noise: Low, or enable "Original sound for musicians"). It is torn down automatically when VanishCam closes.
+- **Windows and macOS:** not automated yet. It needs a virtual audio cable ([VB-Cable](https://vb-audio.com/Cable/) on Windows, [BlackHole](https://github.com/ExistentialAudio/BlackHole) on macOS) with VanishCam playing the effects into it; it's on the to-do list.
 
-## Seguridad y privacidad
+## Security and privacy
 
-- El video se procesa solo en tu computadora; VanishCam no guarda imágenes ni abre conexiones de red, salvo la primera descarga de los modelos de Google MediaPipe, que se verifica con SHA-256.
-- En Linux, si hay que compilar la cámara virtual, el instalador verifica el commit exacto del código fuente antes de compilarlo.
-- Los instaladores de una línea (`curl | bash`, `irm | iex`) ejecutan lo que está en la rama `main` de este repo: si preferís, cloná el repo, revisá los scripts y corrélos a mano.
+- Video is processed only on your computer; VanishCam doesn't save images or open network connections, except for the first download of the Google MediaPipe models, which is verified with SHA-256.
+- On Linux, if the virtual camera has to be built, the installer verifies the exact source commit before building it.
+- The one-line installers (`curl | bash`, `irm | iex`) run whatever is on this repo's `main` branch: if you prefer, clone the repo, review the scripts and run them by hand.
 
-## Desarrollo
+## Development
 
-Contexto para agentes y desarrolladores en [AGENTS.md](AGENTS.md). Tests:
+Context for agents and developers in [AGENTS.md](AGENTS.md). Tests:
 
 ```bash
 .venv/bin/python -m unittest discover -p 'test_*.py'

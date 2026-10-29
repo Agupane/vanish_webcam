@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Arranca VanishCam mandando el video a la cámara virtual (v4l2loopback en Linux, OBS en macOS).
-# Acepta las mismas opciones que vanish_cam.py, p. ej. --mode naruto o --camera /dev/video2.
-# En Linux, --sonido-en-llamada crea el micrófono "VanishCam-Microfono" (tu micrófono + los efectos).
+# Starts VanishCam sending the video to the virtual camera (v4l2loopback on Linux, OBS on macOS).
+# Accepts the same options as vanish_cam.py, e.g. --mode naruto or --camera /dev/video2.
+# On Linux, --call-audio creates the "VanishCam-Mic" microphone (your microphone + the effects).
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,14 +9,14 @@ PYTHON="$APP_DIR/.venv/bin/python"
 CAM_LABEL="VanishCam"
 
 if [[ ! -x "$PYTHON" ]]; then
-  echo "[VanishCam] Falta instalar: corré ./install.sh" >&2
+  echo "[VanishCam] Not installed yet: run ./install.sh" >&2
   exit 1
 fi
 
 call_audio=false
 args=()
 for arg in "$@"; do
-  if [[ $arg == --sonido-en-llamada ]]; then
+  if [[ $arg == --call-audio ]]; then
     call_audio=true
   else
     args+=("$arg")
@@ -24,7 +24,7 @@ for arg in "$@"; do
 done
 
 if [[ "$(uname -s)" == Darwin ]]; then
-  [[ $call_audio == true ]] && echo "[VanishCam] --sonido-en-llamada todavía no está disponible en macOS (ver README)." >&2
+  [[ $call_audio == true ]] && echo "[VanishCam] --call-audio is not available on macOS yet (see README)." >&2
   exec "$PYTHON" "$APP_DIR/vanish_cam.py" --virtual-camera --virtual-backend obs ${args[@]+"${args[@]}"}
 fi
 
@@ -38,8 +38,8 @@ for node in /sys/devices/virtual/video4linux/video*; do
   fi
 done
 if [[ -z $device ]]; then
-  echo "[VanishCam] No encuentro la cámara virtual '$CAM_LABEL'. Probá: sudo modprobe v4l2loopback" >&2
-  echo "            (o corré ./install.sh de nuevo)" >&2
+  echo "[VanishCam] Virtual camera '$CAM_LABEL' not found. Try: sudo modprobe v4l2loopback" >&2
+  echo "            (or run ./install.sh again)" >&2
   exit 1
 fi
 
@@ -60,38 +60,38 @@ load_module() {
 setup_call_audio() {
   local mic speakers
   if ! command -v pactl >/dev/null; then
-    echo "[VanishCam] Falta pactl: sudo apt install pulseaudio-utils" >&2
+    echo "[VanishCam] pactl is missing: sudo apt install pulseaudio-utils" >&2
     exit 1
   fi
   mic="$(pactl get-default-source)"
   speakers="$(pactl get-default-sink)"
   if [[ $mic == vanishcam_* ]]; then
-    echo "[VanishCam] Tu micrófono por defecto es el de VanishCam: elegí tu micrófono real en Ajustes → Sonido." >&2
+    echo "[VanishCam] Your default microphone is VanishCam's: pick your real microphone in Settings → Sound." >&2
     exit 1
   fi
   trap cleanup_call_audio EXIT
-  # Los efectos suenan en vanishcam_fx; de ahí van a tus parlantes y a la mezcla.
-  # La mezcla junta tu micrófono real con los efectos y sale como un micrófono virtual.
-  load_module module-null-sink sink_name=vanishcam_fx sink_properties=device.description=VanishCam-Efectos
-  load_module module-null-sink sink_name=vanishcam_mix sink_properties=device.description=VanishCam-Mezcla
+  # The effects play into vanishcam_fx; from there they go to your speakers and to the mix.
+  # The mix combines your real microphone with the effects and comes out as a virtual microphone.
+  load_module module-null-sink sink_name=vanishcam_fx sink_properties=device.description=VanishCam-Effects
+  load_module module-null-sink sink_name=vanishcam_mix sink_properties=device.description=VanishCam-Mix
   load_module module-loopback source="$mic" sink=vanishcam_mix latency_msec=20
   load_module module-loopback source=vanishcam_fx.monitor sink=vanishcam_mix latency_msec=20
   load_module module-loopback source=vanishcam_fx.monitor sink="$speakers" latency_msec=20
   load_module module-remap-source source_name=vanishcam_mic master=vanishcam_mix.monitor \
-    source_properties=device.description=VanishCam-Microfono
+    source_properties=device.description=VanishCam-Mic
   export PULSE_SINK=vanishcam_fx SDL_AUDIODRIVER=pulseaudio
-  echo "[VanishCam] Sonido en la llamada: en Zoom o Meet elegí el micrófono 'VanishCam-Microfono'."
-  echo "            Bajá la supresión de ruido de Zoom/Meet o puede borrar los efectos."
+  echo "[VanishCam] Call audio: in Zoom or Meet pick the 'VanishCam-Mic' microphone."
+  echo "            Lower Zoom/Meet noise suppression or it may remove the effects."
 }
 
-# El OpenCV de pip trae Qt sin soporte Wayland: forzar X11 (XWayland) evita avisos.
+# pip's OpenCV ships Qt without Wayland support: forcing X11 (XWayland) avoids warnings.
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
 
 command=("$PYTHON" "$APP_DIR/vanish_cam.py" --virtual-camera --virtual-backend v4l2loopback
          --virtual-device "$device" ${args[@]+"${args[@]}"})
 if [[ $call_audio == true ]]; then
   setup_call_audio
-  # Sin exec: al salir hay que desarmar el micrófono virtual.
+  # No exec: the virtual microphone has to be torn down on exit.
   "${command[@]}"
 else
   exec "${command[@]}"

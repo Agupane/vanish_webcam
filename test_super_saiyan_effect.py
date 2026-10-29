@@ -278,8 +278,8 @@ class SuperSaiyanLoopTests(unittest.TestCase):
         transform.play.assert_called_once()
         hum.play.assert_called_once_with(loops=-1, fade_ms=400)
         hum.stop.assert_any_call(500)
-        self.assertTrue(any("¡Super Saiyajin!" in line for line in printed))
-        self.assertTrue(any("Volviste a la normalidad" in line for line in printed))
+        self.assertTrue(any("Super Saiyan!" in line for line in printed))
+        self.assertTrue(any("Back to normal" in line for line in printed))
 
     def test_a_short_charge_does_not_transform(self):
         frames, shown, _, sound, _ = run_loop(
