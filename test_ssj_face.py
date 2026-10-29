@@ -186,6 +186,37 @@ class HairOverlayTests(unittest.TestCase):
         self.assertGreater(half[y, x, 2], 90)
         self.assertIs(overlay.render(frame, synthetic_face(), 0.0), frame)
 
+    def test_mask_is_where_the_hair_is_drawn(self):
+        overlay = ssj_face.HairOverlay([self.view])
+        frame = np.full((520, 640, 3), 90, np.uint8)
+        face = synthetic_face()
+        mask = overlay.mask(face, frame.shape)
+        drawn = np.any(overlay.render(frame, face, 1.0) != frame, axis=2)
+        self.assertEqual(mask.shape, frame.shape[:2])
+        self.assertGreater(mask[int(260 - 1.2 * 160), 320], 0.9)
+        self.assertTrue(np.all(mask[~drawn] < 0.02))  # Only alpha too faint to change a pixel.
+        self.assertIsNone(overlay.mask(None, frame.shape))
+
+    def test_aura_rises_from_the_golden_spikes(self):
+        face = synthetic_face()
+        overlay = ssj_face.HairOverlay([self.view])
+        frame = np.full((520, 640, 3), 90, np.uint8)
+        body = np.zeros(frame.shape[:2], np.float32)
+        cv2.ellipse(body, (320, 300), (90, 130), 0, 0, 360, 1.0, -1)
+        hair = overlay.mask(face, frame.shape)
+        top = int(np.argmax(hair[:, 320] > 0.5))
+        output = ssj.render_super_saiyan(frame, body, ssj.PowerLevels(aura=1.0, hair=1.0), 0.5, ssj.AuraRenderer(),
+                                         face=face, hair=overlay)
+        # Before the hair is in (hair level below 0.5) the aura only follows the body.
+        early = ssj.render_super_saiyan(frame, body, ssj.PowerLevels(aura=1.0, hair=0.4), 0.5, ssj.AuraRenderer(),
+                                        face=face, hair=overlay)
+        above = (top - 6, 320)
+        self.assertGreater(int(output[above][2]) - int(early[above][2]), 40)
+        # The spikes themselves stay the hair: no flames painted over them.
+        inside = hair > 0.95
+        hair_only = ssj_face.render_face(frame, face, 1.0, overlay)
+        self.assertLess(np.abs(output.astype(int) - hair_only.astype(int))[inside].max(), 8)
+
 
 class TransformationTimelineTests(unittest.TestCase):
     def test_hair_flickers_late_in_the_charge_then_stays(self):

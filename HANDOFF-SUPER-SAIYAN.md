@@ -246,6 +246,15 @@ charge. Tune in `super_saiyan_effect.py` (`AURA_TONES`, `AURA_RADIUS`, `FLAME_RI
 - 2026-10-29 (Windows session on the owner's PC): installed in `%USERPROFILE%\VanishCam-ssj`. E6.2–E6.4 and the E6.5
   docs done; 135 tests, 134 pass and the Linux sysfs test now skips itself where symlinks are not allowed (Windows
   without Developer Mode). Next: owner gate E6.5, then E1.8 and E4.4.
+- 2026-10-29: home window buttons fixed (act on press; the owner's touchpad drifted between press and release).
+  First E1.8/E4.4 round on Windows (Meet, `ssj_hair/meet1.png` light wall, `meet2.png` dark room; personal, not
+  committed): golden hair fits well, real hair hidden, teal eyes OK. Problems: (1) the chair was still in the
+  silhouette in the dark room (plate stale -> raw segmenter) and (2) in the light room the color difference cut holes
+  in the black hoodie in front of the black chair, so the aura painted blocky patches on the body; (3) the spikes
+  covered the aura instead of being surrounded; (4) brows read as flat painted bars. Fixed: `body_region` (head
+  ellipse + neck strip + shoulder cone from the face) replaces the color cut, the plate only adds back moved parts
+  (raised arms); `HairOverlay.mask` joins the silhouette once the hair is in (`levels.hair >= 0.5`); brows at
+  `BROW_OPACITY = 0.6` with more of their own shading. 141 tests. Next: second owner round with screenshots.
 
 ## 0. Start here
 

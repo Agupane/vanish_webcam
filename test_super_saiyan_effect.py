@@ -255,12 +255,33 @@ class SilhouetteTests(unittest.TestCase):
         self.assertGreater(refined[230, 200], 0.9)  # Shirt.
         self.assertGreater(refined[130, 240], 0.9)  # Face.
 
-    def test_unchanged_without_a_face_or_with_a_stale_background(self):
+    def test_unchanged_without_a_face(self):
         frame, background, segmenter, _, head = chair_scene()
         self.assertIs(ssj.refine_person_mask(segmenter, frame, background, None), segmenter)
-        self.assertIs(ssj.refine_person_mask(segmenter, frame, None, head), segmenter)
-        moved = np.roll(background, 60, axis=1) // 2  # Camera moved and the light changed.
-        self.assertIs(ssj.refine_person_mask(segmenter, frame, moved, head), segmenter)
+
+    def test_chair_is_removed_without_a_plate_or_with_a_stale_one(self):
+        # A dark room or a moved camera makes the plate useless: the head alone still removes the chair.
+        frame, background, segmenter, _, head = chair_scene()
+        moved = np.roll(background, 60, axis=1) // 2
+        for plate in (None, moved):
+            refined = ssj.refine_person_mask(segmenter, frame, plate, head)
+            self.assertLess(refined[100, 180], 0.1)
+            self.assertLess(refined[150, 320], 0.1)
+            self.assertGreater(refined[230, 200], 0.9)
+            self.assertGreater(refined[80, 240], 0.9)
+
+    def test_black_hoodie_in_front_of_a_black_chair_has_no_holes(self):
+        frame, background, segmenter, person, head = chair_scene()
+        frame[(person > 0) & (np.arange(frame.shape[0])[:, None] > 175)] = 35  # Same color as the chair.
+        refined = ssj.refine_person_mask(segmenter, frame, background, head)
+        self.assertGreater(refined[200:270, 140:340].min(), 0.9)
+
+    def test_raised_fist_beside_the_head_is_kept_with_the_plate(self):
+        frame, background, segmenter, _, head = chair_scene()
+        cv2.rectangle(frame, (300, 90), (345, 135), (120, 150, 200), -1)  # Skin over the dark chair.
+        segmenter[90:136, 300:346] = 1.0
+        self.assertGreater(ssj.refine_person_mask(segmenter, frame, background, head)[112, 322], 0.9)
+        self.assertLess(ssj.refine_person_mask(segmenter, frame, None, head)[112, 330], 0.1)
 
     def test_shirt_like_the_wall_does_not_leave_holes(self):
         frame, background, segmenter, _, head = chair_scene()

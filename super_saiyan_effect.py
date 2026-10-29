@@ -32,7 +32,10 @@ DARKEN = 0.28  # Surroundings at full power.
 # Static furniture (a chair) that the segmenter calls "person".
 BACKGROUND_THRESHOLD = 30  # Max channel difference, 0-255, on blurred quarter-size frames.
 STALE_BACKGROUND = 0.25  # Changed fraction outside the person above which the background is not trusted.
-MIN_FRAGMENT = 0.03  # Pieces smaller than this fraction of the person are dropped.
+# Body shape around the face, in face heights (along the head) and face widths (across it).
+SHOULDERS_BELOW_CHIN = 0.35  # Above this line only the head and the neck are the person.
+NECK_HALF_WIDTH = 0.6
+SHOULDER_SLOPE = 3.0  # The allowed width grows this much per pixel below the shoulder line.
 
 # Face Landmarker.
 NOSE, CHIN, FOREHEAD_TOP = 1, 152, 10
@@ -155,43 +158,55 @@ def head_ellipse(faces, width: int, height: int):
             (int(round(0.8 * face_width)), int(round(0.85 * face_height))), angle)
 
 
-def refine_person_mask(mask: np.ndarray, frame: np.ndarray, background: np.ndarray | None, head) -> np.ndarray:
-    """Drop static furniture the segmenter calls "person" (a chair) using the calibrated background.
+def body_region(head, size: tuple[int, int], scale: tuple[float, float]) -> np.ndarray:
+    """Where a person under this head can be: head ellipse, neck strip and a cone widening into the shoulders.
 
-    Only segmenter pixels that differ from the background are kept, plus the head ellipse (dark
-    hair in front of a dark chair barely differs from it). Holes are filled and small leftovers
-    dropped. The mask comes back unchanged when there is no face or the background is stale.
+    `size` is (width, height) of the output grid and `scale` maps frame pixels to it. Returns uint8 0/1.
     """
-    if background is None or head is None or background.shape != frame.shape:
+    (cx, cy), (rx, ry), angle = head
+    fx, fy = scale
+    face_height, face_width = ry / 0.85, rx / 0.8  # Inverse of head_ellipse.
+    up = (math.sin(math.radians(angle)), -math.cos(math.radians(angle)))
+    chin = (cx - up[0] * 0.65 * face_height, cy - up[1] * 0.65 * face_height)
+    xs = (np.arange(size[0], dtype=np.float32) + 0.5) / fx - chin[0]
+    ys = (np.arange(size[1], dtype=np.float32) + 0.5) / fy - chin[1]
+    along = ys[:, None] * up[1] + xs[None, :] * up[0]  # Above the chin when positive.
+    across = np.abs(xs[None, :] * -up[1] + ys[:, None] * up[0])
+    below_shoulders = -along - SHOULDERS_BELOW_CHIN * face_height
+    neck = (across < NECK_HALF_WIDTH * face_width) & (along < 0.65 * face_height)
+    body = (below_shoulders >= 0) & (across < NECK_HALF_WIDTH * face_width + SHOULDER_SLOPE * below_shoulders)
+    region = (neck | body).astype(np.uint8)
+    cv2.ellipse(region, (int(round(cx * fx)), int(round(cy * fy))),
+                (max(1, int(round(rx * fx))), max(1, int(round(ry * fy)))), angle, 0, 360, 1, -1)
+    return region
+
+
+def refine_person_mask(mask: np.ndarray, frame: np.ndarray, background: np.ndarray | None, head) -> np.ndarray:
+    """Drop static furniture the segmenter calls "person" (a high-back chair) around the head.
+
+    The face says where the body can be (`body_region`): the chair back beside and above the head and
+    beside the neck is cut, and the body below the shoulder line is left as the segmenter sees it.
+    Cutting the body by color difference with the background plate left holes where a black hoodie
+    sits in front of a black chair, and the aura then painted inside them. The plate, when trusted,
+    only adds back parts that moved outside that region (raised arms). Unchanged without a face.
+    """
+    if head is None:
         return mask
     height, width = mask.shape
     size = (max(8, width // 4), max(8, height // 4))
-    small = cv2.GaussianBlur(cv2.resize(frame, size, interpolation=cv2.INTER_AREA), (5, 5), 0)
-    plate = cv2.GaussianBlur(cv2.resize(background, size, interpolation=cv2.INTER_AREA), (5, 5), 0)
-    changed = cv2.absdiff(small, plate).max(axis=2) > BACKGROUND_THRESHOLD
-    person = cv2.resize(mask, size, interpolation=cv2.INTER_AREA) > 0.5
-    if not person.any():
-        return mask
-    outside = ~person
-    if outside.any() and float(changed[outside].mean()) > STALE_BACKGROUND:
-        return mask
-    keep = (person & changed).astype(np.uint8)
-    (cx, cy), (rx, ry), angle = head
-    fx, fy = size[0] / width, size[1] / height
-    cv2.ellipse(keep, (int(cx * fx), int(cy * fy)), (max(1, int(rx * fx)), max(1, int(ry * fy))),
-                angle, 0, 360, 1, -1)
-    keep &= person.astype(np.uint8)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    keep = cv2.morphologyEx(keep, cv2.MORPH_OPEN, kernel)
-    keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, kernel, iterations=2)
-    contours, _ = cv2.findContours(keep, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    minimum = MIN_FRAGMENT * float(person.sum())
-    filled = np.zeros_like(keep)
-    for contour in contours:
-        if cv2.contourArea(contour) >= minimum:
-            cv2.drawContours(filled, [contour], -1, 1, -1)
-    filled &= person.astype(np.uint8)
-    soft = cv2.GaussianBlur(filled.astype(np.float32), (0, 0), 1.0)
+    allowed = body_region(head, size, (size[0] / width, size[1] / height))
+    if background is not None and background.shape == frame.shape:
+        small = cv2.GaussianBlur(cv2.resize(frame, size, interpolation=cv2.INTER_AREA), (5, 5), 0)
+        plate = cv2.GaussianBlur(cv2.resize(background, size, interpolation=cv2.INTER_AREA), (5, 5), 0)
+        changed = cv2.absdiff(small, plate).max(axis=2) > BACKGROUND_THRESHOLD
+        person = cv2.resize(mask, size, interpolation=cv2.INTER_AREA) > 0.5
+        outside = ~person
+        if person.any() and (not outside.any() or float(changed[outside].mean()) <= STALE_BACKGROUND):
+            # Opening drops the thin slivers a slightly moved chair leaves along its edges.
+            moved = cv2.morphologyEx((changed & person).astype(np.uint8), cv2.MORPH_OPEN,
+                                     cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+            allowed |= moved
+    soft = cv2.GaussianBlur(allowed.astype(np.float32), (0, 0), 1.5)
     return np.minimum(mask, cv2.resize(soft, (width, height), interpolation=cv2.INTER_LINEAR))
 
 
@@ -236,15 +251,19 @@ class AuraRenderer:
         self._geometry: AuraGeometry | None = None
 
     def geometry(self, frame: np.ndarray, mask: np.ndarray, background: np.ndarray | None = None,
-                 head=None) -> AuraGeometry | None:
+                 head=None, extra=None) -> AuraGeometry | None:
+        """`extra` returns more silhouette (the golden hair); called only when a new mask arrives."""
         if mask is not self._mask:
             self._mask = mask
-            self._geometry = self._prepare(frame, mask, background, head)
+            self._geometry = self._prepare(frame, mask, background, head, extra)
             self.geometry_updates += 1
         return self._geometry
 
-    def _prepare(self, frame, mask, background, head) -> AuraGeometry | None:
+    def _prepare(self, frame, mask, background, head, extra=None) -> AuraGeometry | None:
         refined = refine_person_mask(mask, frame, background, head).astype(np.float32)
+        added = extra() if extra is not None else None
+        if added is not None:
+            refined = np.maximum(refined, added)
         x, y, w, h = cv2.boundingRect((refined > 0.3).astype(np.uint8))
         if w <= 0 or h <= 0:
             return None
@@ -300,10 +319,11 @@ class AuraRenderer:
         return layers[0] * 0.6 + layers[1] * 0.4
 
     def render(self, frame: np.ndarray, mask: np.ndarray | None, intensity: float, t: float,
-               radius_scale: float = 1.0, background: np.ndarray | None = None, head=None) -> np.ndarray:
+               radius_scale: float = 1.0, background: np.ndarray | None = None, head=None,
+               extra=None) -> np.ndarray:
         if mask is None or intensity <= 0.0:
             return frame
-        geometry = self.geometry(frame, mask, background, head)
+        geometry = self.geometry(frame, mask, background, head, extra)
         if geometry is None:
             return frame
         power = min(1.0, intensity)
@@ -439,7 +459,11 @@ def render_super_saiyan(frame: np.ndarray, mask: np.ndarray | None,
                         face: np.ndarray | None = None, hair: ssj_face.HairOverlay | None = None) -> np.ndarray:
     output = frame
     if aura is not None:
-        output = aura.render(output, mask, levels.aura, t, levels.radius, background, head)
+        # Once the golden hair is in, the aura surrounds it too instead of being covered by the spikes.
+        extra = None
+        if hair is not None and face is not None and levels.hair >= 0.5:
+            extra = lambda: hair.mask(face, frame.shape)
+        output = aura.render(output, mask, levels.aura, t, levels.radius, background, head, extra)
     # Eyes, brows and the imported hair, on top of the aura (spikes may stick out of the silhouette).
     output = ssj_face.render_face(output, face, levels.hair, hair)
     if levels.flash > 0.0:

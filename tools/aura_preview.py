@@ -1,8 +1,8 @@
 """Render the Super Saiyan aura on a synthetic scene, for tuning without a camera.
 
 The scene is drawn here (a wall, a high-back chair and a person with dark hair); no camera frame is read or written.
-Rows: light wall, dark wall. Columns: two moments with the background plate, then without it (the chair stays in
-the silhouette, as with the plain segmenter mask).
+Rows: light wall, dark wall. Columns: two moments with the background plate, then without it (a dark room or a
+moved camera): the face alone must still keep the chair out of the silhouette.
 
     .venv/bin/python tools/aura_preview.py aura.png          # write the grid
     .venv/bin/python tools/aura_preview.py --show            # open a window instead
@@ -50,7 +50,7 @@ def grid(times=(0.0, 0.37)) -> np.ndarray:
         aura = ssj.AuraRenderer()
         levels = ssj.PowerLevels(aura=1.0)
         cells = [ssj.render_super_saiyan(frame, mask, levels, t, aura, background, head) for t in times]
-        cells.append(ssj.render_super_saiyan(frame, mask, levels, times[0], ssj.AuraRenderer()))
+        cells.append(ssj.render_super_saiyan(frame, mask, levels, times[0], ssj.AuraRenderer(), None, head))
         rows.append(np.hstack(cells))
     return np.vstack(rows)
 

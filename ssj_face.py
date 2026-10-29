@@ -36,6 +36,7 @@ HAIR_ANCHORS = (33, 133, 362, 263, NOSE, FOREHEAD_TOP, CHIN, FACE_LEFT, FACE_RIG
 
 EYE_COLOR = np.array((175, 205, 40), np.float32)  # BGR teal-green.
 BROW_COLOR = np.array((40, 200, 255), np.float32)  # BGR gold.
+BROW_OPACITY = 0.6
 HAIR_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".PNG", ".JPG", ".JPEG", ".WEBP")
 HAIR_VIEWS = (("front", "look straight at the camera"),
               ("left", "turn your head a little to one side"),
@@ -126,15 +127,15 @@ def tint_brows(frame: np.ndarray, face: np.ndarray, strength: float) -> np.ndarr
             continue
         light = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY).astype(np.float32)
         skin = float(np.percentile(light, 80))  # The box is mostly skin around the brow.
-        hairs = np.clip((skin - light) / 35.0, 0.0, 1.0) * region
-        alpha = cv2.GaussianBlur(hairs, (0, 0), 0.8) * (0.8 * min(1.0, strength))
+        hairs = np.clip((skin - light) / 55.0, 0.0, 1.0) * region
+        alpha = cv2.GaussianBlur(hairs, (0, 0), 1.2) * (BROW_OPACITY * min(1.0, strength))
         if not alpha.any():
             continue
         if result is frame:
             result = frame.copy()
         patch = result[y0:y1, x0:x1].astype(np.float32)
-        # Brow hairs are dark: lift them towards gold, keeping some of their own shading.
-        tinted = np.clip(BROW_COLOR * (0.7 + 0.9 * light[:, :, None] / 255.0), 0, 255)
+        # Brow hairs are dark: lift them towards gold, keeping their own shading (no flat painted bar).
+        tinted = np.clip(BROW_COLOR * (0.35 + 1.3 * light[:, :, None] / 255.0), 0, 255)
         result[y0:y1, x0:x1] = (patch + (tinted - patch) * alpha[:, :, None]).astype(np.uint8)
     return result
 
@@ -267,23 +268,43 @@ class HairOverlay:
         yaw = face_yaw(face)
         return min(self.views, key=lambda view: abs(view.yaw - yaw))
 
-    def render(self, frame: np.ndarray, face: np.ndarray | None, strength: float) -> np.ndarray:
-        if strength <= 0.0 or not self.views or not usable_face(face):
-            return frame
+    def place(self, face: np.ndarray | None, shape) -> tuple[np.ndarray, tuple[int, int, int, int]] | None:
+        """The hair warped onto this face: BGRA patch and its (x0, y0, x1, y1) box in the frame."""
+        if not self.views or not usable_face(face):
+            return None
         view = self.pick(face)
         matrix, _ = cv2.estimateAffinePartial2D(view.anchors, face[list(HAIR_ANCHORS)], method=cv2.LMEDS)
         if matrix is None or not np.isfinite(matrix).all():
-            return frame
+            return None
         height, width = view.rgba.shape[:2]
         corners = np.array([(0, 0), (width, 0), (0, height), (width, height)], np.float32)
         placed = corners @ matrix[:, :2].T + matrix[:, 2]
-        x0, y0, x1, y1 = _box(placed, 1, frame.shape)
+        x0, y0, x1, y1 = _box(placed, 1, shape)
         if x1 <= x0 or y1 <= y0:
-            return frame
+            return None
         shifted = matrix.copy()
         shifted[:, 2] -= (x0, y0)
         warped = cv2.warpAffine(view.rgba, shifted, (x1 - x0, y1 - y0), flags=cv2.INTER_LINEAR,
                                 borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
+        return warped, (x0, y0, x1, y1)
+
+    def mask(self, face: np.ndarray | None, shape) -> np.ndarray | None:
+        """Where the hair covers the frame, 0-1, so the aura can surround it."""
+        placed = self.place(face, shape)
+        if placed is None:
+            return None
+        warped, (x0, y0, x1, y1) = placed
+        mask = np.zeros(shape[:2], np.float32)
+        mask[y0:y1, x0:x1] = warped[:, :, 3] / np.float32(255.0)
+        return mask
+
+    def render(self, frame: np.ndarray, face: np.ndarray | None, strength: float) -> np.ndarray:
+        if strength <= 0.0:
+            return frame
+        placed = self.place(face, frame.shape)
+        if placed is None:
+            return frame
+        warped, (x0, y0, x1, y1) = placed
         alpha = warped[:, :, 3].astype(np.float32) * (min(1.0, strength) / 255.0)
         if not alpha.any():
             return frame
