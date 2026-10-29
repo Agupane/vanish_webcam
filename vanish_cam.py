@@ -1831,10 +1831,10 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     levels = power.levels(now)
                     mask = update_mask(0.1)
                     faces = latest_faces(recognizer, elapsed_ms)
-                    # The background plate and the head let the aura drop the chair from the silhouette.
+                    # The head lets the aura drop the chair from the silhouette.
                     head = ssj.head_ellipse(faces, width, height)
                     face = ssj_face.points_from_landmarks(faces[0], width, height) if faces else None
-                    display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura, background, head,
+                    display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura, head,
                                                       face, hair)
 
             view_display = display

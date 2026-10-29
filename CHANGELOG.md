@@ -7,11 +7,12 @@ All notable changes to this fork are documented here. The format is based on
 
 ### Changed
 
-- Super Saiyan silhouette after the first real-call test (owner, Windows, Meet): the high-back chair is removed with
-  the face geometry (head, neck and a shoulder cone) instead of by color difference with the background photo, which
-  left holes where a black hoodie sat in front of the black chair (the aura painted inside them) and failed in a dark
-  room. The photo now only adds back raised arms. The aura also surrounds the golden hair, so the flames rise from the
-  spikes, and the golden eyebrows are softer (they read as painted bars).
+- Super Saiyan silhouette after real-call tests (owner, Windows, Meet): above the eyes only the head counts as the
+  person, so a high-back chair behind the head is left out; below the eyes the segmenter mask is kept as it is. The
+  previous cut by color difference with the background photo failed in a dark room and with a swivel chair, and made
+  holes where a black hoodie sat in front of the black chair, so the aura painted blocky patches on the body. The aura
+  also surrounds the golden hair, so the flames rise from the spikes, and the golden eyebrows are softer (they read as
+  painted bars).
 
 - Started without options (Desktop shortcut, Applications menu), VanishCam opens a home window (`home_ui.py`) for the
   effect, the camera and the Super Saiyan hair (take photos, copy the prompt, open the folder, check the pictures),

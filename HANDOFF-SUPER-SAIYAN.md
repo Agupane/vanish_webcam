@@ -255,6 +255,13 @@ charge. Tune in `super_saiyan_effect.py` (`AURA_TONES`, `AURA_RADIUS`, `FLAME_RI
   ellipse + neck strip + shoulder cone from the face) replaces the color cut, the plate only adds back moved parts
   (raised arms); `HairOverlay.mask` joins the silhouette once the hair is in (`levels.hair >= 0.5`); brows at
   `BROW_OPACITY = 0.6` with more of their own shading. 141 tests. Next: second owner round with screenshots.
+- 2026-10-29: second round (`meet3.png`, `meet4.png`, light room only): the aura around the hair looks right, but the
+  shoulder cone was wrong for this camera: a close webcam above the face sees the shoulders *above* the chin, so they
+  were cut and painted yellow; the swivel chair moves when the owner turns, so the plate add-back brought back jagged
+  chair pieces. Replaced by the simplest rule that never cuts the body: above `EYE_LINE` only the head ellipse, below
+  it the segmenter as is (`body_region`); the background photo is no longer used by the aura (parameter removed from
+  `refine_person_mask`, `AuraRenderer` and `render_super_saiyan`). The chair below the eyes stays in the silhouette:
+  acceptable, the aura wraps it like broad shoulders. 139 tests. Next: third round, including the dark room.
 
 ## 0. Start here
 

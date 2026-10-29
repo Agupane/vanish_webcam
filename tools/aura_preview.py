@@ -1,8 +1,8 @@
 """Render the Super Saiyan aura on a synthetic scene, for tuning without a camera.
 
 The scene is drawn here (a wall, a high-back chair and a person with dark hair); no camera frame is read or written.
-Rows: light wall, dark wall. Columns: two moments with the background plate, then without it (a dark room or a
-moved camera): the face alone must still keep the chair out of the silhouette.
+Rows: light wall, dark wall. Columns: two moments, then a close webcam that sees the shoulders above the chin (the
+body must never be cut: no aura painted on it).
 
     .venv/bin/python tools/aura_preview.py aura.png          # write the grid
     .venv/bin/python tools/aura_preview.py --show            # open a window instead
@@ -23,34 +23,35 @@ import super_saiyan_effect as ssj  # noqa: E402
 LIGHT_WALL, DARK_WALL = (205, 208, 212), (60, 55, 50)
 
 
-def scene(wall, height: int = 540, width: int = 960):
-    """Background plate, live frame, segmenter-like mask (person + chair) and the head ellipse."""
-    background = np.full((height, width, 3), wall, np.uint8)
+def scene(wall, shoulders: int = 340, height: int = 540, width: int = 960):
+    """Live frame, segmenter-like mask (person + chair) and the head ellipse. `shoulders` is the shoulder top row."""
     chair = np.zeros((height, width), np.uint8)
     cv2.ellipse(chair, (430, 330), (150, 210), 0, 0, 360, 1, -1)
+    background = np.full((height, width, 3), wall, np.uint8)
     background[chair > 0] = (40, 38, 40)
     person = np.zeros((height, width), np.uint8)
     cv2.ellipse(person, (430, 240), (75, 95), 0, 0, 360, 1, -1)
     cv2.rectangle(person, (400, 320), (460, 360), 1, -1)
-    cv2.ellipse(person, (430, 560), (230, 220), 0, 180, 360, 1, -1)
-    cv2.rectangle(person, (200, 400), (660, 540), 1, -1)
+    cv2.ellipse(person, (430, shoulders + 220), (230, 220), 0, 180, 360, 1, -1)
+    cv2.rectangle(person, (200, shoulders + 60), (660, 540), 1, -1)
     frame = background.copy()
     frame[person > 0] = (200, 170, 80)  # Blue shirt.
     cv2.ellipse(frame, (430, 250), (62, 80), 0, 0, 360, (120, 150, 200), -1)  # Face.
     cv2.ellipse(frame, (430, 200), (75, 50), 0, 180, 360, (30, 30, 32), -1)  # Dark hair.
     mask = cv2.GaussianBlur(np.maximum(person, chair).astype(np.float32), (0, 0), 3)
     head = ((430, 225), (80, 100), 0.0)
-    return background, frame, mask, head
+    return frame, mask, head
 
 
 def grid(times=(0.0, 0.37)) -> np.ndarray:
     rows = []
     for wall in (LIGHT_WALL, DARK_WALL):
-        background, frame, mask, head = scene(wall)
+        frame, mask, head = scene(wall)
         aura = ssj.AuraRenderer()
         levels = ssj.PowerLevels(aura=1.0)
-        cells = [ssj.render_super_saiyan(frame, mask, levels, t, aura, background, head) for t in times]
-        cells.append(ssj.render_super_saiyan(frame, mask, levels, times[0], ssj.AuraRenderer(), None, head))
+        cells = [ssj.render_super_saiyan(frame, mask, levels, t, aura, head) for t in times]
+        close_frame, close_mask, _ = scene(wall, shoulders=280)
+        cells.append(ssj.render_super_saiyan(close_frame, close_mask, levels, times[0], ssj.AuraRenderer(), head))
         rows.append(np.hstack(cells))
     return np.vstack(rows)
 

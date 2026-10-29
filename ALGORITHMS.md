@@ -128,10 +128,12 @@ The aura is fully procedural (there is no GIF anymore). Second version (2026-10-
 
 Per mask update (`AuraRenderer.geometry`, cached by mask identity, so 10 Hz under a 30 FPS output):
 
-- `refine_person_mask`: at quarter resolution, keep only segmenter pixels that differ from the calibrated background
-  (blurred max-channel difference > 30), always keep the `head_ellipse` from the face landmarks, open/close, fill holes,
-  drop fragments < 3 % of the person. Unchanged mask when there is no face or > 25 % of the outside differs (stale
-  background).
+- `refine_person_mask`: at quarter resolution, `body_region` = the `head_ellipse` from the face landmarks plus
+  everything below the eye line (`EYE_LINE`, rotated with the head); blurred, upscaled and multiplied into the
+  segmenter mask. No background photo: the color-difference cut failed on the owner's setup (dark room, swivel chair,
+  black hoodie on a black chair, close webcam with the shoulders above the chin) and painted the aura on the body.
+- the golden hair (`HairOverlay.mask`) joins the silhouette when the hair level is ≥ 0.5, so the flames rise from
+  the spikes.
 - crop sized from the largest radius (flash × pulse) plus the flame rise, so the aura is never cut; a fade ramp keeps
   the field at zero on crop borders that are not the frame border;
 - half resolution: outside and inside distance transforms, rim band (6 px, stronger at the top), contour points.
@@ -146,10 +148,10 @@ Per frame:
 - glow: the alpha blurred at half resolution (sigma 4), outside the person, added as warm light (`GLOW = 0.55`);
 - one `cv2.blendLinear` + one `cv2.add` on the crop.
 
-Measured on claude-bcn (no MediaPipe there), with the background plate: ~5.4–5.6 ms per frame with a new mask every
-third frame (main's version: ~5.9 ms on the same CPU, without the background step). `tools/aura_preview.py` renders the
-look on a synthetic scene. `test_fast_enough_for_live_video` now includes the background step and a
-mask refresh every third frame, with a 20 ms budget.
+Measured on claude-bcn (no MediaPipe there): ~5.4–5.6 ms per frame with a new mask every third frame (main's
+version: ~5.9 ms on the same CPU); not re-measured after the eye-line silhouette, which is cheaper than the old
+background step. `tools/aura_preview.py` renders the look on a synthetic scene. `test_fast_enough_for_live_video` uses
+a mask refresh every third frame, with a 20 ms budget.
 
 Ideas:
 

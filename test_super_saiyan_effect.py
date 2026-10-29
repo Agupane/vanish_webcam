@@ -202,15 +202,14 @@ class AuraTests(unittest.TestCase):
         self.assertEqual(first.shape, self.frame.shape)
 
     def test_fast_enough_for_live_video(self):
-        background = np.full((540, 960, 3), 200, np.uint8)
-        frame = background.copy()
+        frame = np.full((540, 960, 3), 200, np.uint8)
         frame[150:540, 380:580] = (200, 150, 60)
         mask = np.zeros((540, 960), np.float32)
         mask[150:540, 380:580] = 1.0
         head = ((480, 230), (70, 90), 0.0)
         aura = ssj.AuraRenderer()
         levels = ssj.PowerLevels(aura=1.0)
-        ssj.render_super_saiyan(frame, mask, levels, 0.0, aura, background, head)
+        ssj.render_super_saiyan(frame, mask, levels, 0.0, aura, head)
         samples = []
         current = mask
         for _ in range(3):
@@ -219,75 +218,58 @@ class AuraTests(unittest.TestCase):
                 # A new mask every third frame, like the 10 Hz mask under a 30 FPS output.
                 if index % 3 == 0:
                     current = mask.copy()
-                ssj.render_super_saiyan(frame, current, levels, index / 30, aura, background, head)
+                ssj.render_super_saiyan(frame, current, levels, index / 30, aura, head)
             samples.append((time.perf_counter() - started) / 15)
-        # ~5.5 ms on claude-bcn (main took 5.9 ms there without the background step); CI runners are slower.
+        # ~5.5 ms on claude-bcn (main took 5.9 ms there); CI runners are slower.
         self.assertLess(min(samples), 0.02)
 
 
 def chair_scene():
-    """Light wall, a dark chair back behind a person with dark hair; the segmenter takes the chair too."""
+    """A high-back chair behind a person with dark hair; the segmenter takes the chair too."""
     height, width = 270, 480
-    background = np.full((height, width, 3), 210, np.uint8)
     chair = np.zeros((height, width), np.uint8)
     cv2.ellipse(chair, (240, 160), (90, 120), 0, 0, 360, 1, -1)
-    background[chair > 0] = 35
     person = np.zeros((height, width), np.uint8)
     cv2.ellipse(person, (240, 120), (38, 48), 0, 0, 360, 1, -1)  # Head with dark hair.
     cv2.rectangle(person, (130, 190), (350, 270), 1, -1)  # Shoulders and torso.
     cv2.rectangle(person, (225, 160), (255, 195), 1, -1)  # Neck.
-    frame = background.copy()
+    frame = np.full((height, width, 3), 210, np.uint8)
+    frame[chair > 0] = 35
     frame[person > 0] = (200, 160, 70)  # Blue shirt.
     cv2.ellipse(frame, (240, 128), (30, 38), 0, 0, 360, (120, 150, 200), -1)  # Face.
     cv2.ellipse(frame, (240, 95), (36, 22), 0, 180, 360, (30, 30, 32), -1)  # Hair, as dark as the chair.
     segmenter = np.maximum(person, chair).astype(np.float32)
     head = ((240, 112), (36, 50), 0.0)
-    return frame, background, segmenter, person, head
+    return frame, segmenter, head
 
 
 class SilhouetteTests(unittest.TestCase):
-    def test_chair_is_removed_but_the_dark_hair_stays(self):
-        frame, background, segmenter, person, head = chair_scene()
-        refined = ssj.refine_person_mask(segmenter, frame, background, head)
+    def test_chair_around_the_head_is_removed_but_the_dark_hair_stays(self):
+        _, segmenter, head = chair_scene()
+        refined = ssj.refine_person_mask(segmenter, head)
         self.assertLess(refined[100, 180], 0.1)  # Chair beside the head.
-        self.assertLess(refined[150, 320], 0.1)  # Chair beside the neck.
+        self.assertLess(refined[50, 240], 0.1)  # Chair above the head.
         self.assertGreater(refined[80, 240], 0.9)  # Dark hair in front of the dark chair.
-        self.assertGreater(refined[230, 200], 0.9)  # Shirt.
         self.assertGreater(refined[130, 240], 0.9)  # Face.
 
+    def test_body_below_the_eyes_is_never_cut(self):
+        # A close webcam sees the shoulders above the chin, and a black hoodie in front of a black chair has no
+        # edge: below the eye line the segmenter mask is kept as it is, so the aura never paints on the body.
+        _, segmenter, head = chair_scene()
+        refined = ssj.refine_person_mask(segmenter, head)
+        self.assertLess(np.abs(refined[130:] - segmenter[130:]).max(), 0.05)
+
     def test_unchanged_without_a_face(self):
-        frame, background, segmenter, _, head = chair_scene()
-        self.assertIs(ssj.refine_person_mask(segmenter, frame, background, None), segmenter)
+        _, segmenter, _ = chair_scene()
+        self.assertIs(ssj.refine_person_mask(segmenter, None), segmenter)
 
-    def test_chair_is_removed_without_a_plate_or_with_a_stale_one(self):
-        # A dark room or a moved camera makes the plate useless: the head alone still removes the chair.
-        frame, background, segmenter, _, head = chair_scene()
-        moved = np.roll(background, 60, axis=1) // 2
-        for plate in (None, moved):
-            refined = ssj.refine_person_mask(segmenter, frame, plate, head)
-            self.assertLess(refined[100, 180], 0.1)
-            self.assertLess(refined[150, 320], 0.1)
-            self.assertGreater(refined[230, 200], 0.9)
-            self.assertGreater(refined[80, 240], 0.9)
-
-    def test_black_hoodie_in_front_of_a_black_chair_has_no_holes(self):
-        frame, background, segmenter, person, head = chair_scene()
-        frame[(person > 0) & (np.arange(frame.shape[0])[:, None] > 175)] = 35  # Same color as the chair.
-        refined = ssj.refine_person_mask(segmenter, frame, background, head)
-        self.assertGreater(refined[200:270, 140:340].min(), 0.9)
-
-    def test_raised_fist_beside_the_head_is_kept_with_the_plate(self):
-        frame, background, segmenter, _, head = chair_scene()
-        cv2.rectangle(frame, (300, 90), (345, 135), (120, 150, 200), -1)  # Skin over the dark chair.
-        segmenter[90:136, 300:346] = 1.0
-        self.assertGreater(ssj.refine_person_mask(segmenter, frame, background, head)[112, 322], 0.9)
-        self.assertLess(ssj.refine_person_mask(segmenter, frame, None, head)[112, 330], 0.1)
-
-    def test_shirt_like_the_wall_does_not_leave_holes(self):
-        frame, background, segmenter, _, head = chair_scene()
-        frame[215:240, 260:300] = background[215:240, 260:300]  # A patch of shirt with the wall's color.
-        refined = ssj.refine_person_mask(segmenter, frame, background, head)
-        self.assertGreater(refined[228, 280], 0.9)
+    def test_tilted_head_tilts_the_line(self):
+        _, segmenter, _ = chair_scene()
+        tilted = ssj.refine_person_mask(segmenter, ((240, 112), (36, 50), 30.0))
+        # Top of the head leaning right: the eye line rises on the left, so at the same row the chair
+        # is still body-level on the left and already above the eyes on the right.
+        self.assertGreater(tilted[118, 180], 0.9)
+        self.assertLess(tilted[118, 300], 0.1)
 
     def test_head_ellipse_covers_the_hair_above_the_face(self):
         width, height = 640, 480
@@ -299,11 +281,11 @@ class SilhouetteTests(unittest.TestCase):
         self.assertIsNone(ssj.head_ellipse([], width, height))
 
     def test_aura_uses_the_refined_silhouette(self):
-        frame, background, segmenter, _, head = chair_scene()
-        with_plate = ssj.AuraRenderer().render(frame, segmenter, 1.0, 0.5, background=background, head=head)
+        frame, segmenter, head = chair_scene()
+        with_head = ssj.AuraRenderer().render(frame, segmenter, 1.0, 0.5, head=head)
         without = ssj.AuraRenderer().render(frame, segmenter, 1.0, 0.5)
         # Over the chair, beside the head: lit by the aura only once the chair is out of the silhouette.
-        self.assertGreater(int(with_plate[100, 192, 2]) - int(without[100, 192, 2]), 30)
+        self.assertGreater(int(with_head[100, 192, 2]) - int(without[100, 192, 2]), 30)
 
 
 class PowerStateTests(unittest.TestCase):

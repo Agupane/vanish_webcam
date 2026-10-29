@@ -160,8 +160,8 @@ tool's terms.
 
 **Turn off background blur and virtual backgrounds in Zoom, Google Meet or Teams** while you use VanishCam. Those
 features blur or replace everything that is not you, and the aura lives exactly there: with them on it turns into a
-blurry smudge. If a chair or other furniture is right behind you, take the background photo with it in place: the aura
-uses that photo to tell you apart from the chair.
+blurry smudge. A high-back chair behind your head is left out of the aura using your face; below your eyes the aura
+follows whatever the camera sees as you, chair included, so it never paints over your body.
 
 Keys (with the VanishCam window focused): `V` vanish, `R` reappear (or restart the setup while calibrating), `S` Super
 Saiyan on/off, `SPACE` retake the background photo, `P` pause/resume, `F` fullscreen, `Q` quit. A side panel next to
