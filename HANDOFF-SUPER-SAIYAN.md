@@ -17,29 +17,45 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
 
 ### E1 — Visual foundations (§4.1, §4.2, §6.3)
 
-- [ ] **E1.1 The aura is not clipped by its crop.** Margins derived from the maximum aura radius plus the flame rise;
+- [x] **E1.1 The aura is not clipped by its crop.** Margins derived from the maximum aura radius plus the flame rise;
   the field fades to zero before the crop border. *Check:* unit test — along the crop border the added light is 0;
   render of the synthetic scene shows no straight vertical/horizontal cut.
-- [ ] **E1.2 Geometry cached per mask update.** Distance transforms, person mask at half resolution, rim and contour
+  *Done `6c8c7f3`: `test_not_cut_by_its_crop` passes. The old version's cut was reproduced on a render of the
+  synthetic scene; the render of the new version is still pending (see E1.6).*
+- [x] **E1.2 Geometry cached per mask update.** Distance transforms, person mask at half resolution, rim and contour
   points are recomputed only when a new mask arrives (10 Hz), not per output frame (30 Hz); compositing is
   `cv2.blendLinear`/uint8. *Check:* unit test that a second frame with the same mask does not recompute the geometry;
   `test_fast_enough_for_live_video` budget lowered and passing; ms/frame before/after in ALGORITHMS.md.
-- [ ] **E1.3 Static furniture removed from the silhouette.** `refine_person_mask(mask, frame, background, head)`: keep
+  *Done: `test_geometry_is_cached_per_mask`; budget 40 → 20 ms with background + mask refresh every 3rd frame;
+  claude-bcn 3.9 ms cached / 4.9 ms with refreshes vs 5.9 ms on main (same CPU). Owner-CPU numbers pending (E2.1).*
+- [x] **E1.3 Static furniture removed from the silhouette.** `refine_person_mask(mask, frame, background, head)`: keep
   only segmenter pixels that differ from the calibrated background, always keep a head/hair ellipse from the face
   landmarks, fill holes, drop small fragments; return the input mask unchanged when the background is stale (camera
   moved, light changed) or no face is known. *Check:* unit tests on a synthetic chair: chair removed, dark hair in front
   of a dark chair kept, stale background → unchanged, no face → unchanged.
-- [ ] **E1.4 Darker surroundings while transformed.** Outside the person, the frame is darkened proportionally to the
+  *Done: `SilhouetteTests` (5 tests, incl. a shirt patch with the wall's color → no hole). Wired in `run_camera` with
+  `latest_faces` + `head_ellipse`. Risk to watch on hardware: lighting changes after calibration (auto-exposure) can
+  mark the background stale → falls back to the plain segmenter mask (chair back again, nothing breaks).*
+- [x] **E1.4 Darker surroundings while transformed.** Outside the person, the frame is darkened proportionally to the
   aura intensity (~25 % at full power). *Check:* unit test — a far background pixel is darker, the person's interior is
   unchanged, intensity 0 changes nothing.
-- [ ] **E1.5 Rim light on the person.** Warm light in a thin band inside the silhouette edge, stronger at the top;
+  *Done: `DARKEN = 0.28`; `test_surroundings_darken_with_the_power`; intensity 0 returns the frame untouched
+  (`test_no_intensity_no_change`).*
+- [x] **E1.5 Rim light on the person.** Warm light in a thin band inside the silhouette edge, stronger at the top;
   exactly zero deeper inside. *Check:* unit test — edge pixel warmer, interior pixel identical.
+  *Done: `RIM_WIDTH = 6` (half res), `RIM_ALPHA = 0.45`; `test_rim_light_only_along_the_inside_edge`,
+  `test_does_not_paint_the_person`.*
 - [ ] **E1.6 Cel-shaded aura with flame tongues all around.** 3 flat tones (gold, yellow, near-white inner rim) with
   short anti-aliased steps, drawn with alpha (visible on light walls, not only additive), tongues from upward-stretched
   scrolling noise sampled in frame coordinates (stable when the bbox moves), tighter than today. *Check:* renders of the
   synthetic scene on a light wall and a dark wall attached to the PR/commit message description; unit test that the
   aura is yellow next to the silhouette, rises above the head and is zero far from it.
-- [ ] **E1.7 Docs.** README + GUIDE: turn off background blur/replacement in Meet/Zoom/Teams while using VanishCam;
+  *Code and unit tests done (`test_glows_yellow_next_to_the_silhouette_and_rises`,
+  `test_light_wall_still_shows_a_yellow_aura`). **Pending:** the renders. On claude-bcn the auto-mode permission
+  classifier blocked running the render script, so it is now in the repo: `.venv/bin/python tools/aura_preview.py
+  aura.png` (synthetic light/dark wall + chair + dark hair; columns: two times with the background plate, one
+  without). Run it, look at it, and tune `AURA_TONES`, `AURA_RADIUS`, `FLAME_RISE`, `DARKEN` before asking the owner.*
+- [x] **E1.7 Docs.** README + GUIDE: turn off background blur/replacement in Meet/Zoom/Teams while using VanishCam;
   the status panel says so while transformed. CHANGELOG + ALGORITHMS updated.
 - [ ] **E1.8 Gate (owner):** Ubuntu and Windows, real camera, Meet with background effects off: one screenshot on a
   light wall, one in a darker room. Chair not wrapped, no visible lag in the aura when moving, no FPS drop compared to
@@ -86,6 +102,8 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
 ### Progress log
 
 - 2026-10-29: plan written; E1 started on `feat/ssj-realism`.
+- 2026-10-29: E1.1–E1.5 and E1.7 done, E1.6 code done (renders pending); 97 tests pass on claude-bcn (Linux). Next:
+  E1.6 renders and tuning, CI on Ubuntu + Windows, then the owner gate E1.8.
 
 ## 0. Start here
 

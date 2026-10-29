@@ -18,6 +18,7 @@ Algorithm inventory, measured costs, hot spots and the optimization backlog: [AL
 | `naruto_effect.py` | Naruto mode: joined palms, smoke + falling log, reverse effect to reappear |
 | `super_saiyan_effect.py` | Super Saiyan (inside Dragon Ball): charge-ki pose, `PowerState`, procedural `AuraRenderer` (surrounds the silhouette, never paints the person), synthesized sounds |
 | `vanish_sound.py` | Plays an effect sound (pygame, or `ffplay` fallback); `play(loops, fade_ms)`, `stop(fade_ms)`, `set_volume` |
+| `tools/aura_preview.py` | Renders the Super Saiyan aura on a synthetic scene (light/dark wall, chair) for tuning without a camera |
 | `test_*.py` | unittest suite; `run_loop()` in `test_video_output.py` drives the real loop with a fake clock |
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
 | `install-ubuntu.sh` | apt packages, v4l2loopback (falls back to building a pinned upstream commit with DKMS), venv, models, `.desktop` |

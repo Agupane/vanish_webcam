@@ -20,7 +20,7 @@ Last updated: 2026-10-29, after removing the GIF aura and the golden-hair pipeli
 | Normal and Naruto modes | Implemented, not re-verified on hardware after the latest refactors |
 | Virtual camera (v4l2loopback) | Verified on the owner's Ubuntu machine (`/dev/video10`, `pyvirtualcam`) |
 | Audio, model downloads, installers | Implemented; Windows/macOS hardware paths are still unverified |
-| Unit tests | 87 (`python -m unittest discover -p 'test_*.py'`) |
+| Unit tests | 97 (`python -m unittest discover -p 'test_*.py'`) |
 
 ## Frame pipeline
 
@@ -60,7 +60,7 @@ The virtual camera only ever receives `display`; the HUD and the setup outline a
 | 11 | Normal dissolve | `vanish_cam.apply_dissolve`, `make_dissolve_fields` | few–10 ms | Full-frame float blend; fields precomputed once |
 | 12 | Naruto substitution | `naruto_effect.render_substitution`, `_smoke_layer`, `overlay_log` | few ms | Smoke on a cropped RGBA layer; log sprite cached per scale |
 | 13 | Super Saiyan power state | `super_saiyan_effect.PowerState` | negligible | `off → charging → flash → super → powering_down` |
-| 14 | Super Saiyan aura | `super_saiyan_effect.AuraRenderer.render` | ~11 ms at 960×540 | Distance transform + rising flames + noise + sparks, half resolution; never paints inside the person mask |
+| 14 | Super Saiyan aura | `super_saiyan_effect.AuraRenderer.render`, `refine_person_mask`, `head_ellipse` | ~4–5 ms at 960×540 (claude-bcn; was ~6 ms there, ~11 ms on the owner's CPU) | Geometry (refined mask, distance transforms, rim, contour) cached per mask update; per frame: darken, noise, cel-tone LUT, sparks, one `blendLinear` on the crop. Paints outside the person; inside only a rim band |
 | 15 | Flash and shake | `super_saiyan_effect.render_super_saiyan`, `shake_frame` | <1 ms | `cv2.warpAffine` only when shake > 0 |
 | 16 | HUD panel | `vanish_cam.render_status_panel`, `compose_dashboard` | ~1 ms, cached | Cache keyed by phase/action/camera/height/log; `--no-hud` disables it |
 | 17 | Setup outline | `vanish_cam.draw_setup_marks` | <1 ms | HUD only; reuses the calibration mask, `cv2.boundingRect` |
@@ -124,28 +124,35 @@ Ideas:
 
 ### 3. Super Saiyan aura
 
-The aura is fully procedural (there is no GIF anymore). `AuraRenderer.render`:
+The aura is fully procedural (there is no GIF anymore). Second version (2026-10-29, branch `feat/ssj-realism`).
 
-- crops the person mask to its bbox;
-- downsamples to half resolution;
-- computes an outside distance transform;
-- builds a ring with an exponential falloff (`AURA_RADIUS = 22` at half resolution);
-- adds upward flames with a vertical `filter2D` and scrolling noise;
-- draws sparks along the silhouette contour;
-- zeroes the glow inside the person mask (`glow *= 1 - person`);
-- resizes the glow back and adds it to the frame.
+Per mask update (`AuraRenderer.geometry`, cached by mask identity, so 10 Hz under a 30 FPS output):
 
-It therefore surrounds the person and never recolors hair or body. Measured ~11 ms at 960×540 for a 190×390 mask;
-`render_super_saiyan` is ~13.6 ms including flash/shake. The test `test_fast_enough_for_live_video` guards this.
+- `refine_person_mask`: at quarter resolution, keep only segmenter pixels that differ from the calibrated background
+  (blurred max-channel difference > 30), always keep the `head_ellipse` from the face landmarks, open/close, fill holes,
+  drop fragments < 3 % of the person. Unchanged mask when there is no face or > 25 % of the outside differs (stale
+  background).
+- crop sized from the largest radius (flash × pulse) plus the flame rise, so the aura is never cut; a fade ramp keeps
+  the field at zero on crop borders that are not the frame border;
+- half resolution: outside and inside distance transforms, rim band (6 px, stronger at the top), contour points.
+
+Per frame:
+
+- darken the frame (`convertScaleAbs`, 28 % at full power) and copy the person back on the crop;
+- ring `exp(-d / r)` with a 3 Hz pulse, rising flames with two vertical box blurs (anchored below), two scrolling
+  noise textures sampled in frame coordinates (stable when the bbox moves);
+- field → `cv2.LUT` with three flat tones and short anti-aliased steps; LUT entry 255 is the rim inside the person;
+- sparks from a precomputed table; one `cv2.blendLinear` on the crop.
+
+Measured on claude-bcn (no MediaPipe there): ~3.9 ms with cached geometry, ~4.9 ms with a new mask every third frame
+(main's version: ~5.9 ms on the same CPU). `test_fast_enough_for_live_video` now includes the background step and a
+mask refresh every third frame, with a 20 ms budget.
 
 Ideas:
 
-1. Convert the glow blend to integer/LUT maths like the removed GIF path (screen blend was ~1.4× faster with
-   `cv2.multiply`/`bitwise_not`). The aura is additive, so an 8-bit `cv2.add` with precomputed colors may be enough.
-2. Precompute the noise at the largest expected size and crop/roll it instead of resizing every frame.
-3. Cache the distance transform/ring for a few frames when the mask barely changes (10 Hz mask vs 30 FPS output).
-4. Drop or reduce sparks on slow machines; they are cosmetic and cost contour extraction + 30 circle draws.
-5. Expose the aura radius/scale as a constant or CLI option if the owner wants a bigger/smaller aura.
+1. Contour-mapped flame strip (`distanceTransformWithLabels` + `cv2.remap`), see HANDOFF-SUPER-SAIYAN.md §4.3.
+2. Drop or reduce sparks on slow machines; they are cosmetic.
+3. Expose the aura radius, darkening and tone colors as options if the owner wants to tune them without code.
 
 ### 4. Effects
 

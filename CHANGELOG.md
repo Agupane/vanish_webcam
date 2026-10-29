@@ -5,6 +5,15 @@ All notable changes to this fork are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- Super Saiyan aura, second version: three flat cel-shaded tones with rising flame tongues, alpha blended so it shows on
+  light walls; the room darkens while transformed and a thin rim of light runs inside the edge of the body (the
+  interior is untouched). The calibrated background photo plus a head ellipse from the face landmarks remove static
+  furniture (a high-back chair) from the silhouette. The aura is no longer cut by a straight line at the sides, and its
+  geometry is cached per mask update (~4–5 ms per frame at 960×540 on claude-bcn, down from ~6 ms). The README, the
+  guide and the status panel tell users to turn off background blur in their call app.
+
 ### Added
 
 - `LICENSE` (MIT, for this fork's contributions), `NOTICE.md` (upstream code and third-party licenses),

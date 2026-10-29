@@ -51,14 +51,18 @@ A stray single-frame gesture no longer makes you vanish, and after each effect y
    the forehead to just below the chin).
 2. Hold the pose for **1.5 seconds**: the image shakes, a small aura starts and the charge sound plays. If you let go
    early, it's cancelled.
-3. A white flash and you're **Super Saiyan**: a yellow aura with rising flames and sparks surrounds your silhouette.
-   Your hair and body are **not** recolored. A background hum plays.
+3. A white flash and you're **Super Saiyan**: a golden, cel-shaded aura with rising flames and sparks surrounds your
+   silhouette, the room around you gets darker and the edge of your body catches its light. Your hair and clothes are
+   **not** recolored. A background hum plays.
 4. To go back to normal, repeat the pose for 1.5 seconds or press `S`.
 
 - **Teleport:** if you teleport while transformed, you come back transformed; the hum pauses and resumes.
+- **In a call:** turn off background blur and virtual backgrounds in Zoom, Meet or Teams. They blur or replace
+  everything that is not you, which is exactly where the aura is drawn.
 - **The aura:** it is procedural (no extra model or GIF). It follows the person mask and is drawn only outside your
-  silhouette, so it never paints your hair or clothes. The first version used a GIF and golden-hair recolor; both were
-  removed because they looked wrong.
+  silhouette; inside it there is only a thin band of light along the edge. The background photo from the setup is used
+  to drop static furniture the person detector confuses with you (a high-back chair), so take it with the chair in
+  place. The first version used a GIF and golden-hair recolor; both were removed because they looked wrong.
 - **Your own sounds:** put `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` or `assets/ssj_aura.MP3` (also `.mp3`,
   `.wav`, `.ogg`, `.m4a` or `.flac`) and those are used instead of the generated ones. Dragon Ball uses
   `assets/teleport.mp3`.

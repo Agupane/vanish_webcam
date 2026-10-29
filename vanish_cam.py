@@ -1125,7 +1125,9 @@ def status_snapshot(state, mode: str, super_saiyan: bool, power, gesture_help: s
         return f"SETUP: step out of the frame. Background photo in {remaining or 0} s.", "calibrating"
     if state.phase == "ready":
         if super_saiyan and power.transformed:
-            return "Super Saiyan! Repeat the pose or press S to power down.", "super"
+            # Call apps blur everything that is not the person, and the aura lives outside the person.
+            return ("Super Saiyan! Repeat the pose or press S to power down. "
+                    "Turn off background blur in your call app to see the aura."), "super"
         if super_saiyan and power.phase == "charging":
             return "Charging ki... keep both fists in front of your face.", "charging"
         if super_saiyan:

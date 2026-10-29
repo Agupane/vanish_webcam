@@ -131,9 +131,15 @@ On Windows, run `install.ps1` again.
 
 ### Super Saiyan (Dragon Ball mode)
 
-Hold **both clenched fists in front of your face, one on each side of the nose**, for 1.5 seconds. A yellow aura with
-rising flames and sparks surrounds your silhouette (your hair and body are not recolored), the image shakes and a hum
-plays. Repeat the pose or press `S` to power down. Teleporting while transformed keeps the transformation.
+Hold **both clenched fists in front of your face, one on each side of the nose**, for 1.5 seconds. A golden aura with
+rising flames and sparks surrounds your silhouette, the room gets darker and the edge of your body catches the light
+(your hair and clothes are not recolored); the image shakes and a hum plays. Repeat the pose or press `S` to power
+down. Teleporting while transformed keeps the transformation.
+
+**Turn off background blur and virtual backgrounds in Zoom, Google Meet or Teams** while you use VanishCam. Those
+features blur or replace everything that is not you, and the aura lives exactly there: with them on it turns into a
+blurry smudge. If a chair or other furniture is right behind you, take the background photo with it in place: the aura
+uses that photo to tell you apart from the chair.
 
 Keys (with the VanishCam window focused): `V` vanish, `R` reappear (or restart the setup while calibrating), `S` Super
 Saiyan on/off, `SPACE` retake the background photo, `P` pause/resume, `F` fullscreen, `Q` quit. A side panel next to
