@@ -12,12 +12,21 @@ APP_DIR="${VANISHCAM_APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 say() { printf '\n[VanishCam] %s\n' "$*"; }
 fail() { printf '\n[VanishCam] %s\n' "$*" >&2; exit 1; }
 
+# Resolve a branch/tag to its commit: codeload may serve a cached archive for a branch.
+resolve_ref() {
+  local sha
+  sha="$(curl -fsSL "https://api.github.com/repos/$REPO/commits/$REF" 2>/dev/null \
+    | grep -m1 -o '"sha": *"[0-9a-f]\{40\}"' | grep -o '[0-9a-f]\{40\}')"
+  printf '%s' "${sha:-$REF}"
+}
+
 if [[ ${1:-} != --apply ]]; then
   [[ -f "$APP_DIR/vanish_cam.py" ]] || fail "Run this from the VanishCam folder."
   [[ -x "$APP_DIR/.venv/bin/python" ]] || fail "VanishCam is not installed yet: run ./install.sh first."
   tmp="$(mktemp -d)"
+  archive_ref="$(resolve_ref)"
   say "Downloading VanishCam ($REF)..."
-  if ! curl -fsSL "https://github.com/$REPO/archive/$REF.tar.gz" -o "$tmp/src.tar.gz"; then
+  if ! curl -fsSL "https://github.com/$REPO/archive/$archive_ref.tar.gz" -o "$tmp/src.tar.gz"; then
     rm -rf "$tmp"
     fail "Could not download $REPO ($REF)."
   fi

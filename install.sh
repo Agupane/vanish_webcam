@@ -23,6 +23,14 @@ sha256() {
   fi
 }
 
+# Resolve a branch/tag to its commit: codeload may serve a cached archive for a branch.
+resolve_ref() {
+  local sha
+  sha="$(curl -fsSL "https://api.github.com/repos/$REPO/commits/$REF" 2>/dev/null \
+    | grep -m1 -o '"sha": *"[0-9a-f]\{40\}"' | grep -o '[0-9a-f]\{40\}')"
+  printf '%s' "${sha:-$REF}"
+}
+
 install_uv() {
   local tmp
   tmp="$(mktemp -d)"
@@ -98,9 +106,10 @@ main() {
 
   # Run via curl | bash: download the repo and continue from there.
   if [[ -z $script_dir || ! -f "$script_dir/vanish_cam.py" ]]; then
-    say "Downloading VanishCam ($REF) to $TARGET..."
     tmp="$(mktemp -d)"
-    if ! curl -fsSL "https://github.com/$REPO/archive/$REF.tar.gz" -o "$tmp/vanishcam.tar.gz"; then
+    archive_ref="$(resolve_ref)"
+    say "Downloading VanishCam ($REF)..."
+    if ! curl -fsSL "https://github.com/$REPO/archive/$archive_ref.tar.gz" -o "$tmp/vanishcam.tar.gz"; then
       rm -rf "$tmp"
       fail "Could not download $REPO ($REF)."
     fi
