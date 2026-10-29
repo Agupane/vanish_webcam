@@ -79,8 +79,9 @@ A stray single-frame gesture no longer makes you vanish, and after each effect y
   your choice, save the results as `ssj_hair/ssj_*.png` with **Open folder**, then **Check pictures**; or
   `--ssj-hair-photos` from a terminal; the README has the steps). At startup VanishCam cuts the golden hair out of each
   picture and caches it in `ssj_hair/.cache/`; while transformed it fits the hair on your head (position, size and tilt)
-  and picks the picture closest to where you are looking. To redo it, replace the picture: the cache notices. If the
-  terminal says "No golden hair found", ask the image tool for brighter, clearly yellow hair on a plain gray background.
+  and picks the picture closest to where you are looking (with a short fade when it changes). The hair follows your
+  head every frame, sways a little behind it, pops up when you transform and flutters gently with the ki. To redo it,
+  replace the picture: the cache notices. If the terminal says "No golden hair found", ask the image tool for brighter, clearly yellow hair on a plain gray background.
 - **Your own sounds:** put `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` or `assets/ssj_aura.MP3` (also `.mp3`,
   `.wav`, `.ogg`, `.m4a` or `.flac`) and those are used instead of the generated ones. Dragon Ball uses
   `assets/teleport.mp3`.

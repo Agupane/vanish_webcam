@@ -19,7 +19,8 @@ Algorithm inventory, measured costs, hot spots and the optimization backlog: [AL
 | `super_saiyan_effect.py` | Super Saiyan (inside Dragon Ball): charge-ki pose, `PowerState`, procedural `AuraRenderer` (surrounds the silhouette, never paints the person), synthesized sounds |
 | `home_ui.py` | Home window (OpenCV-drawn): effect, camera, Super Saiyan hair actions, START; `run_home(settings, actions)` with callbacks from `vanish_cam`; settings file and clipboard/folder helpers |
 | `vanish_sound.py` | Plays an effect sound (pygame, or `ffplay` fallback); `play(loops, fade_ms)`, `stop(fade_ms)`, `set_volume` |
-| `ssj_face.py` | Super Saiyan face: teal irises, golden brows, import of the user's golden hair pictures (`ssj_hair/ssj_*.png`) and `HairOverlay`, which fits the hair on the live face |
+| `ssj_face.py` | Super Saiyan face: teal irises, golden brows, import of the user's golden hair pictures (`ssj_hair/ssj_*.png`) and `HairOverlay`, which fits the hair on the live face (`place_live`: view fade + tips warp, `PlacedHair` shared with the aura) |
+| `ssj_motion.py` | Hair motion, pure NumPy/OpenCV with an injected clock: `fit_similarity` (weighted, deterministic), `HeadTracker` (a face every frame from ~12.5 Hz detections: alpha-beta filter + decaying prediction), `HairDynamics` (spring sway, power-up kick), `hair_warp_maps` (roots fixed, tips move, ki flutter) |
 | `tools/aura_preview.py` | Renders the Super Saiyan aura on a synthetic scene (light/dark wall, chair) for tuning without a camera |
 | `test_*.py` | unittest suite; `run_loop()` in `test_video_output.py` drives the real loop with a fake clock |
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |

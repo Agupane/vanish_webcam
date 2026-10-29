@@ -165,8 +165,12 @@ def head_ellipse(faces, width: int, height: int):
     """Head and hair around the first face as ((cx, cy), (rx, ry), angle) in pixels, or None."""
     if not faces:
         return None
-    face = _points(faces[0], width, height)
-    if face.shape[0] <= max(FACE_RIGHT, CHIN) or not np.isfinite(face).all():
+    return head_ellipse_from_points(_points(faces[0], width, height))
+
+
+def head_ellipse_from_points(face: np.ndarray | None):
+    """`head_ellipse` for face points already in pixels (the tracked face)."""
+    if face is None or face.shape[0] <= max(FACE_RIGHT, CHIN) or not np.isfinite(face).all():
         return None
     top, chin = face[FOREHEAD_TOP], face[CHIN]
     face_height = float(np.linalg.norm(chin - top))
@@ -463,20 +467,25 @@ def shake_frame(frame: np.ndarray, amplitude: float, t: float) -> np.ndarray:
 def render_super_saiyan(frame: np.ndarray, mask: np.ndarray | None,
                         levels: PowerLevels, t: float, aura: AuraRenderer | None, head=None,
                         face: np.ndarray | None = None, hair: ssj_face.HairOverlay | None = None,
-                        hands=(), eyes: bool = True, brows: bool = True) -> np.ndarray:
-    """`hands` are the latest hand landmarks (normalized), kept out of the aura."""
+                        hands=(), eyes: bool = True, brows: bool = True,
+                        placed: ssj_face.PlacedHair | None = None) -> np.ndarray:
+    """`hands` are the latest hand landmarks (normalized), kept out of the aura. `placed` is the hair already
+    placed for this frame (with its motion): the aura and the drawing then share it instead of fitting it twice.
+    """
     output = frame
     if aura is not None and mask is not None:
         def extra() -> np.ndarray | None:
             # The golden hair (once it is in: the flames rise from the spikes) and the hands join the silhouette.
             parts = [hands_mask(hands, mask)]
-            if hair is not None and face is not None and levels.hair >= 0.5:
+            if placed is not None and levels.hair >= 0.5:
+                parts.append(ssj_face.HairOverlay.mask_from(placed, frame.shape))
+            elif hair is not None and face is not None and levels.hair >= 0.5:
                 parts.append(hair.mask(face, frame.shape))
             parts = [part for part in parts if part is not None]
             return np.maximum.reduce(parts) if parts else None
         output = aura.render(output, mask, levels.aura, t, levels.radius, head, extra)
     # Eyes, brows and the imported hair, on top of the aura (spikes may stick out of the silhouette).
-    output = ssj_face.render_face(output, face, levels.hair, hair, eyes, brows)
+    output = ssj_face.render_face(output, face, levels.hair, hair, eyes, brows, placed)
     if levels.flash > 0.0:
         output = np.clip(output.astype(np.float32) + (255.0 - output) * min(1.0, levels.flash),
                          0, 255).astype(np.uint8)

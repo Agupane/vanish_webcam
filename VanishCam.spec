@@ -30,7 +30,7 @@ a = Analysis(
     datas=collect_data_files("mediapipe") + [(str(path), destination) for path, destination in resources],
     hiddenimports=[
         "dragonball_effect", "mediapipe.tasks.c", "pygame.mixer",
-        "pyvirtualcam", "ssj_face", "super_saiyan_effect", "vanish_sound",
+        "pyvirtualcam", "ssj_face", "ssj_motion", "super_saiyan_effect", "vanish_sound",
     ],
     hookspath=[],
     hooksconfig={},

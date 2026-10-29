@@ -7,6 +7,12 @@ All notable changes to this fork are documented here. The format is based on
 
 ### Changed
 
+- Super Saiyan golden hair moves smoothly: the head is tracked every frame (filtered and predicted between the
+  ~12.5 face detections per second, chin left out of the fit so talking does not resize the hair) instead of holding
+  and jumping; the hair sways behind the head with one overshoot, pops up at the transformation, flutters gently with
+  the ki while the head is still (roots fixed, tips moving), and fades between the front and side pictures instead of
+  switching. The eyes, brows and the aura use the same tracked face (`ssj_motion.py`).
+
 - Super Saiyan: the detected hands join the silhouette, so the aura no longer covers the raised fists of the
   power-down pose. Teal eyes and golden eyebrows can be switched off (home window checkboxes, remembered, or
   `--no-ssj-eyes` / `--no-ssj-brows`) for people who already have green eyes or fair eyebrows. The home window, the

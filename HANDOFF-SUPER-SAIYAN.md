@@ -110,8 +110,8 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
   synthetic render (rotated 10°, scaled 0.9) fits the head and covers the real hair.
 - [ ] **E4.4 Gate (owner):** run `--ssj-hair-photos`, make the pictures, check the look on Ubuntu and Windows.
   Known risks to watch: (a) a warm-lit forehead in the generated picture may be taken as hair; (b) the real hair can
-  peek out where the generated hair is smaller; (c) the hair and eyes follow the face at the detection rate (12.5 Hz),
-  so they lag a little on fast head moves until E2.3; (d) in a PyInstaller one-file build `APP_DIR` is a temporary
+  peek out where the generated hair is smaller; (c) fixed by `ssj_motion.HeadTracker` (the hair, eyes and brows
+  follow a face predicted every frame instead of holding at 12.5 Hz); (d) in a PyInstaller one-file build `APP_DIR` is a temporary
   folder, so `ssj_hair/` must move to a user data folder before shipping binaries.
 
 ### E5 — macOS (after E1–E3 are approved on Ubuntu and Windows)
@@ -274,6 +274,17 @@ charge. Tune in `super_saiyan_effect.py` (`AURA_TONES`, `AURA_RADIUS`, `FLAME_RI
   fists (above the eye line, outside the head ellipse; detection itself uses the clean camera frame): `hands_mask`
   (hand landmark hulls, padded, intersected with the segmenter) joins the silhouette via the aura's `extra`.
   147 tests. Owner also asked for animated hair that follows the head smoothly (plan being analyzed).
+- 2026-10-29: hair motion done (owner: "dale todo"), new `ssj_motion.py` + `test_ssj_motion.py`. Causes found: the
+  face held for 2-3 frames then jumped (12.5 Hz detection, no prediction); LMEDS on 9 points flipped inliers; the
+  chin made the hair change size when talking; hard view switches; rigid hair. Done: weighted Procrustes
+  (`ANCHOR_WEIGHTS`, chin 0.05), `HeadTracker` (alpha-beta on centre/angle/log-scale measured at the anchors'
+  centre, `TRACK_ALPHA_MIN 0.4`, speed-adaptive, decaying prediction ≤ 0.15 s; fed only new detections via the
+  detector's `last_good_face_ms`, list identity for a Mock), `HairDynamics` (spring, kick in `transform`),
+  `HairOverlay.select` (hysteresis + 0.2 s fade), `hair_warp_maps` (roots fixed via `root_weights`, sway, roll,
+  flutter scaled by `levels.aura`), one `PlacedHair` shared by aura and drawing; eyes, brows and the head ellipse use
+  the tracked face. Not done on purpose: optical-flow tracking between detections (plan P3) — only if the owner still
+  sees the hair slide after this. 167 tests; +2 ms/frame on the owner's CPU. Next: owner screen recording (fast head
+  turns, talking, power up/down) to tune `SWAY_*`, `FLUTTER_*`, `TRACK_*`.
 
 ## 0. Start here
 

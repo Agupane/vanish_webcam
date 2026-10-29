@@ -28,6 +28,7 @@ try:
     from . import dragonball_effect as dragonball
     from . import home_ui
     from . import ssj_face
+    from . import ssj_motion
     from . import super_saiyan_effect as ssj
     from .naruto_effect import (
         EFFECT_SECONDS, REAPPEAR_SECONDS, joined_hands_from_landmarks, landed_log_anchor,
@@ -38,6 +39,7 @@ except ImportError:
     import dragonball_effect as dragonball
     import home_ui
     import ssj_face
+    import ssj_motion
     import super_saiyan_effect as ssj
     from naruto_effect import (
         EFFECT_SECONDS, REAPPEAR_SECONDS, joined_hands_from_landmarks, landed_log_anchor,
@@ -1132,6 +1134,12 @@ def latest_faces(recognizer, timestamp_ms: int | None = None) -> list:
     return faces if isinstance(faces, list) else []
 
 
+def face_detected_ms(recognizer) -> int | None:
+    """When the detector last saw a face (its own timestamp), or None if it does not say."""
+    value = getattr(recognizer, "last_good_face_ms", None)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def latest_hands(recognizer) -> list:
     hands = getattr(recognizer, "last_hands", [])
     return hands if isinstance(hands, list) else []
@@ -1529,6 +1537,10 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     power = ssj.PowerState()
     power_hold = GestureHold(ssj.CHARGE_SECONDS)
     aura = ssj.AuraRenderer() if super_saiyan else None
+    # The face arrives ~12.5 times a second: the tracker gives one per frame, the dynamics make the hair move.
+    head_tracker = ssj_face.head_tracker()
+    hair_dynamics = ssj_motion.HairDynamics()
+    last_face_seen: list = [None, None]  # Detection time (ms) and faces list of the last face fed to the tracker.
     charge_sound = transform_sound = hum_sound = None
     if super_saiyan:
         # Created after the teleport sound, which owns the mixer and is closed last.
@@ -1587,6 +1599,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
 
     def transform(now: float) -> None:
         power.transform(now)
+        hair_dynamics.kick()  # The hair pops up with the flash.
         charge_sound.stop(80)
         transform_sound.play()
         hum_sound.play(loops=-1, fade_ms=400)
@@ -1601,6 +1614,11 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     def stop_power() -> None:
         power.reset()
         power_hold.reset()
+        head_tracker.reset()
+        hair_dynamics.reset()
+        last_face_seen[:] = [None, None]
+        if hair is not None:
+            hair.reset()
         if super_saiyan:
             for extra in (charge_sound, transform_sound, hum_sound):
                 extra.stop()
@@ -1869,13 +1887,31 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     levels = power.levels(now)
                     mask = update_mask(0.1)
                     faces = latest_faces(recognizer, elapsed_ms)
+                    seconds = elapsed_ms / 1000.0
+                    # Feed the tracker only new detections (the stale face kept while fists hide it is not one).
+                    detected_ms = face_detected_ms(recognizer)
+                    if detected_ms is not None:
+                        is_new = bool(faces) and detected_ms != last_face_seen[0]
+                    else:  # A detector that does not timestamp its faces: a new list is a new detection.
+                        is_new = bool(faces) and faces is not last_face_seen[1]
+                    detection = None
+                    if is_new:
+                        last_face_seen[:] = [detected_ms, faces]
+                        detection = ssj_face.points_from_landmarks(faces[0], width, height)
+                    face = head_tracker.update(
+                        seconds, detection, None if detected_ms is None or not is_new else detected_ms / 1000.0)
+                    placed = None
+                    if face is not None:
+                        hair_dynamics.step(seconds, *ssj_face.head_pose(face))
+                        if hair is not None:
+                            placed = hair.place_live(face, camera_frame.shape, seconds,
+                                                     hair_dynamics.motion(levels.aura), head_tracker.yaw)
                     # The head lets the aura drop the chair from the silhouette.
-                    head = ssj.head_ellipse(faces, width, height)
-                    face = ssj_face.points_from_landmarks(faces[0], width, height) if faces else None
+                    head = ssj.head_ellipse_from_points(face)
                     display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura, head,
                                                       face, hair, latest_hands(recognizer),
                                                       getattr(args, "ssj_eyes", True),
-                                                      getattr(args, "ssj_brows", True))
+                                                      getattr(args, "ssj_brows", True), placed)
 
             view_display = display
             if hud and state.phase == "calibrating":

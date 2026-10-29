@@ -133,6 +133,14 @@ Per mask update (`AuraRenderer.geometry`, cached by mask identity, so 10 Hz unde
   `BODY_SLOPE` px per px down (a chair is cut along a slope, not a flat shelf); blurred, upscaled and multiplied into the
   segmenter mask. No background photo: the color-difference cut failed on the owner's setup (dark room, swivel chair,
   black hoodie on a black chair, close webcam with the shoulders above the chin) and painted the aura on the body.
+- the hair moves every frame (`ssj_motion`): `HeadTracker` turns the ~12.5 Hz face detections into a face per
+  frame (weighted Procrustes on `HAIR_ANCHORS` with the chin weighted out, alpha-beta filter on centre/angle/scale,
+  prediction with a decaying velocity, re-acquire on jumps > 0.5 face widths, lost after 1 s); `HairDynamics` adds a
+  2 Hz under-damped spring sway (≤ 6 % of a face width, ≤ 6°) and a kick at the flash; `HairOverlay.place_live`
+  switches pictures with hysteresis and a 0.2 s fade and warps with one `cv2.remap` (exact affine per pixel plus a
+  16 px grid displacement: roots fixed, tips swayed, ki flutter). Measured on the owner's Windows CPU with the real
+  cut-out at 960×540: 4.1 ms median per frame (2.1 ms for the old rigid fit). The aura and the drawing share one
+  `PlacedHair`;
 - the golden hair (`HairOverlay.mask`) joins the silhouette when the hair level is ≥ 0.5, so the flames rise from
   the spikes.
 - crop sized from the largest radius (flash × pulse) plus the flame rise, so the aura is never cut; a fade ramp keeps
