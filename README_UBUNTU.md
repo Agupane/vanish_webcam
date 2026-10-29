@@ -42,10 +42,23 @@ El script instala lo siguiente:
 
 Un gesto suelto de un solo cuadro ya no te hace desaparecer, y después de cada efecto hay que bajar la mano antes de que el gesto vuelva a contar.
 
+### Super Saiyajin (modo Dragon Ball)
+
+1. Cerrá los puños y ponelos **a la altura del pecho o el abdomen, uno a cada lado del cuerpo**, como cargando ki. Tienen que verse los dos puños y la cara.
+2. Sostené la pose **1,5 segundos**: la imagen tiembla, aparece un aura chica y suena la carga. Si soltás antes, se cancela.
+3. Destello blanco y quedás en **Super Saiyajin**: pelo dorado y aura amarilla con llamas que suben y chispas, con un zumbido de fondo.
+4. Para volver a la normalidad, repetí la pose 1,5 segundos o apretá `S`.
+
+- **Teletransporte:** si te teletransportás transformado, volvés transformado.
+- **Pelo dorado:** usa un modelo extra de Google que se baja la primera vez (16 MB). Sin él, o si sos pelado o tenés gorra, sale solo el aura.
+- **Tus propios sonidos:** poné `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` o `assets/ssj_aura.MP3` y se usan esos en lugar de los generados.
+- **El sonido sale por tus parlantes:** no viaja por la cámara virtual. Los demás en la llamada solo lo escuchan si lo levanta tu micrófono.
+
 | Tecla (con la ventana de vista previa activa) | Acción |
 |---|---|
 | `V` | desaparecer a mano |
 | `R` | reaparecer a mano |
+| `S` | Super Saiyajin sí / no (modo Dragon Ball) |
 | `ESPACIO` | sacar de nuevo la foto del fondo |
 | `F` | pantalla completa |
 | `Q` / `ESC` | salir |

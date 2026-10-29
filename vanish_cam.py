@@ -22,6 +22,7 @@ from mediapipe.tasks.python import vision
 
 try:
     from . import dragonball_effect as dragonball
+    from . import super_saiyan_effect as ssj
     from .naruto_effect import (
         EFFECT_SECONDS, REAPPEAR_SECONDS, joined_hands_from_landmarks, landed_log_anchor,
         load_log, overlay_log, render_reappearance, render_substitution, substitution_anchor,
@@ -29,6 +30,7 @@ try:
     from .vanish_sound import SOUND_PATH, VanishSound
 except ImportError:
     import dragonball_effect as dragonball
+    import super_saiyan_effect as ssj
     from naruto_effect import (
         EFFECT_SECONDS, REAPPEAR_SECONDS, joined_hands_from_landmarks, landed_log_anchor,
         load_log, overlay_log, render_reappearance, render_substitution, substitution_anchor,
@@ -45,8 +47,19 @@ GESTURE_MODEL = MODEL_DIR / "gesture_recognizer.task"
 HAND_MODEL = APP_DIR / "hand_landmarker.task"
 FACE_MODEL = APP_DIR / "face_landmarker.task"
 TELEPORT_SOUND_FILES = (APP_DIR / "assets" / "teleport.MP3", MODEL_DIR / "teleport.wav")
+# Segmentazione multiclasse (classe 1 = capelli) per i capelli dorati del Super Saiyan.
+MULTICLASS_MODEL = MODEL_DIR / "selfie_multiclass_256x256.tflite"
+SSJ_SOUNDS = {
+    "ssj_charge": ssj.write_charge_sound,
+    "ssj_transform": ssj.write_transform_sound,
+    "ssj_aura": ssj.write_aura_hum,
+}
 
 MODEL_URLS = {
+    MULTICLASS_MODEL: (
+        "https://storage.googleapis.com/mediapipe-models/image_segmenter/"
+        "selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite"
+    ),
     SEGMENTER_MODEL: (
         "https://storage.googleapis.com/mediapipe-models/image_segmenter/"
         "selfie_segmenter_landscape/float16/latest/"
@@ -61,6 +74,7 @@ MODEL_URLS = {
 MODEL_SHA256 = {
     "selfie_segmenter_landscape.tflite": "490e9ea734313e0de10fa0cd9e3c6133e36ea4db2b7a49bde9ef019f72796b8e",
     "gesture_recognizer.task": "97952348cf6a6a4915c2ea1496b4b37ebabc50cbbf80571435643c455f2b0482",
+    "selfie_multiclass_256x256.tflite": "c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0",
 }
 
 MODES = ("dragonball", "normal", "naruto")
@@ -309,44 +323,56 @@ def download_models(mode: str = "normal") -> None:
     for destination, url in MODEL_URLS.items():
         if mode != "normal" and destination == GESTURE_MODEL:
             continue
+        if mode == "naruto" and destination == MULTICLASS_MODEL:
+            continue
         expected = MODEL_SHA256.get(destination.name)
         if destination.exists() and (
             file_sha256(destination) == expected if expected else destination.stat().st_size > 100_000
         ):
             continue
+        if destination == MULTICLASS_MODEL:
+            # Opcional: sin él, el Super Saiyajin sale solo con el aura.
+            try:
+                download_model(destination, url, expected)
+            except RuntimeError as error:
+                print(f"[Super Saiyajin] {error} Sigo sin el pelo dorado.")
+            continue
+        download_model(destination, url, expected)
 
-        temporary = destination.with_suffix(destination.suffix + ".part")
-        print(f"[Vanish Lab] Descargando {destination.name}...")
-        try:
-            request = urllib.request.Request(
-                url, headers={"User-Agent": "Vanish-Lab/1.0"}
-            )
-            with urllib.request.urlopen(request, timeout=60) as response:
-                total = int(response.headers.get("Content-Length", 0))
-                received = 0
-                with temporary.open("wb") as output:
-                    while chunk := response.read(1024 * 256):
-                        output.write(chunk)
-                        received += len(chunk)
-                        if total:
-                            percent = int(received * 100 / total)
-                            print(f"\r  {percent:3d}%", end="", flush=True)
-            print()
-            if total and received != total:
-                raise OSError(f"descarga incompleta ({received} de {total} bytes)")
-        except (OSError, urllib.error.URLError) as error:
-            temporary.unlink(missing_ok=True)
-            raise RuntimeError(
-                "No pude descargar los modelos de MediaPipe. "
-                "Revisá la conexión a internet y probá de nuevo."
-            ) from error
-        if expected and file_sha256(temporary) != expected:
-            temporary.unlink(missing_ok=True)
-            raise RuntimeError(
-                f"El modelo descargado {destination.name} no es el esperado (el hash no coincide). "
-                "No lo uso. Si Google publicó una versión nueva, hay que actualizar MODEL_SHA256."
-            )
-        os.replace(temporary, destination)
+
+def download_model(destination: Path, url: str, expected: str | None = None) -> None:
+    temporary = destination.with_suffix(destination.suffix + ".part")
+    print(f"[Vanish Lab] Descargando {destination.name}...")
+    try:
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "Vanish-Lab/1.0"}
+        )
+        with urllib.request.urlopen(request, timeout=60) as response:
+            total = int(response.headers.get("Content-Length", 0))
+            received = 0
+            with temporary.open("wb") as output:
+                while chunk := response.read(1024 * 256):
+                    output.write(chunk)
+                    received += len(chunk)
+                    if total:
+                        percent = int(received * 100 / total)
+                        print(f"\r  {percent:3d}%", end="", flush=True)
+        print()
+        if total and received != total:
+            raise OSError(f"descarga incompleta ({received} de {total} bytes)")
+    except (OSError, urllib.error.URLError) as error:
+        temporary.unlink(missing_ok=True)
+        raise RuntimeError(
+            "No pude descargar los modelos de MediaPipe. "
+            "Revisá la conexión a internet y probá de nuevo."
+        ) from error
+    if expected and file_sha256(temporary) != expected:
+        temporary.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"El modelo descargado {destination.name} no es el esperado (el hash no coincide). "
+            "No lo uso. Si Google publicó una versión nueva, hay que actualizar MODEL_SHA256."
+        )
+    os.replace(temporary, destination)
 
 
 def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCapture:
@@ -841,6 +867,57 @@ def teleport_sound_path() -> Path:
     return dragonball.write_teleport_sound(TELEPORT_SOUND_FILES[-1])
 
 
+def ssj_sound_paths() -> tuple[Path, Path, Path]:
+    """Carga, transformación y zumbido: assets/<nombre>.MP3 si existe, si no se generan."""
+    paths = []
+    for name, writer in SSJ_SOUNDS.items():
+        custom = APP_DIR / "assets" / f"{name}.MP3"
+        generated = MODEL_DIR / f"{name}.wav"
+        if custom.is_file():
+            paths.append(custom)
+        else:
+            paths.append(generated if generated.is_file() else writer(generated))
+    return tuple(paths)
+
+
+def create_hair_tracker() -> ssj.HairTracker | None:
+    if not MULTICLASS_MODEL.is_file():
+        print("[Super Saiyajin] Falta el modelo del pelo: la transformación va a tener solo el aura.")
+        return None
+    try:
+        segmenter = vision.ImageSegmenter.create_from_options(vision.ImageSegmenterOptions(
+            base_options=python.BaseOptions(model_asset_path=str(MULTICLASS_MODEL)),
+            running_mode=vision.RunningMode.IMAGE,
+            output_confidence_masks=True,
+            output_category_mask=False,
+        ))
+    except Exception as error:
+        print(f"[Super Saiyajin] No pude cargar el modelo del pelo ({error}): solo aura.")
+        return None
+    return ssj.HairTracker(segmenter)
+
+
+def power_active(recognizer) -> bool:
+    """Pose de cargar ki en la última inferencia del detector (la teletransportación gana)."""
+    if getattr(recognizer, "last_teleport", False):
+        return False
+    width, height = getattr(recognizer, "last_size", (0, 0))
+    return ssj.charging_from_landmarks(
+        getattr(recognizer, "last_hands", []), getattr(recognizer, "last_faces", []), width, height
+    )
+
+
+def hair_mask(tracker: ssj.HairTracker | None, recognizer, frame: np.ndarray,
+              now: float) -> np.ndarray | None:
+    if tracker is None:
+        return None
+    width, height = getattr(recognizer, "last_size", (0, 0))
+    face = ssj.face_points(getattr(recognizer, "last_faces", []), width, height)
+    if face is not None and (width, height) != (frame.shape[1], frame.shape[0]):
+        face = None
+    return tracker.update(frame, face, now)
+
+
 def set_fullscreen(enabled: bool) -> None:
     mode = cv2.WINDOW_FULLSCREEN if enabled else cv2.WINDOW_NORMAL
     cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, mode)
@@ -854,6 +931,7 @@ def self_test() -> int:
         raise RuntimeError(f"Faltan archivos: {', '.join(missing)}")
     load_log()
     teleport_sound_path()
+    ssj_sound_paths()
     import pygame.mixer  # The distributed build must contain its MP3 decoder.
     for mode in MODES:
         segmenter, recognizer = create_tasks(mode)
@@ -861,6 +939,9 @@ def self_test() -> int:
             recognizer.close()
         finally:
             segmenter.close()
+    hair = create_hair_tracker()
+    if hair is not None:
+        hair.close()
     print("[Webcam] Autoprueba completa: modelos, imágenes y audio presentes.")
     return 0
 
@@ -892,6 +973,21 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         sound = VanishSound(teleport_sound_path())
     if sound is not None:
         resources.callback(sound.close)
+    # Super Saiyajin: solo en Dragon Ball; reusa la inferencia del detector de la teletransportación.
+    super_saiyan = mode == "dragonball"
+    power = ssj.PowerState()
+    power_hold = GestureHold(ssj.CHARGE_SECONDS)
+    aura = ssj.AuraRenderer() if super_saiyan else None
+    hair_tracker = None
+    charge_sound = transform_sound = hum_sound = None
+    if super_saiyan:
+        hair_tracker = create_hair_tracker()
+        if hair_tracker is not None:
+            resources.callback(hair_tracker.close)
+        # Se crean después del sonido del teletransporte, que es el dueño del mixer y se cierra último.
+        charge_sound, transform_sound, hum_sound = (VanishSound(path) for path in ssj_sound_paths())
+        for extra in (charge_sound, transform_sound, hum_sound):
+            resources.callback(extra.close)
     resources.callback(cv2.destroyAllWindows)
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(WINDOW_NAME, args.width, args.height)
@@ -931,11 +1027,35 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     }[mode]
     print("[Webcam] Salí del cuadro: en 4 segundos saco la foto del fondo.")
     print(f"[Webcam] {gesture_help}")
+    if super_saiyan:
+        print("[Webcam] Puños cerrados a la altura del pecho, uno a cada lado, 1,5 segundos: Super Saiyajin. "
+              "Repetilo (o apretá S) para volver a la normalidad.")
     print("[Webcam] Teclas en la ventana: ESPACIO fondo nuevo, R reaparecer, V desaparecer, F pantalla completa, Q salir.")
+
+    def transform(now: float) -> None:
+        power.transform(now)
+        charge_sound.stop(80)
+        transform_sound.play()
+        hum_sound.play(loops=-1, fade_ms=400)
+        print("[Dragon Ball] ¡Super Saiyajin!")
+
+    def power_down(now: float) -> None:
+        power.power_down(now)
+        charge_sound.stop()
+        hum_sound.stop(500)
+        print("[Dragon Ball] Volviste a la normalidad.")
+
+    def stop_power() -> None:
+        power.reset()
+        power_hold.reset()
+        if super_saiyan:
+            for extra in (charge_sound, transform_sound, hum_sound):
+                extra.stop()
 
     def begin_calibration(now: float) -> None:
         nonlocal calibration_remaining, last_person_check, vanished_frame, log_anchor
         nonlocal last_mask, last_mask_at
+        stop_power()
         state.phase = "calibrating"
         state.calibration_started = now
         state.vanish_started = None
@@ -958,6 +1078,17 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
             vanished_frame = None
         if sound is not None:
             sound.play()
+        if super_saiyan:
+            # Una carga a medias se cancela; si ya estaba transformado, se va y vuelve transformado.
+            if power.phase == "charging":
+                power.reset()
+                charge_sound.stop(150)
+            power_hold.reset()
+            if power.transformed:
+                if phase == "vanishing":
+                    hum_sound.stop(300)
+                else:
+                    hum_sound.play(loops=-1, fade_ms=400)
 
     try:
         while True:
@@ -988,6 +1119,12 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     rgb = cv2.cvtColor(camera_frame, cv2.COLOR_BGR2RGB)
                     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 return mp_image
+
+            def golden(frame: np.ndarray, now: float) -> np.ndarray:
+                """Con el Super Saiyajin activo, la teletransportación se lleva el pelo dorado."""
+                if not (super_saiyan and power.transformed):
+                    return frame
+                return ssj.recolor_hair(frame, hair_mask(hair_tracker, recognizer, frame, now), 1.0)
 
             def update_mask(every: float) -> np.ndarray | None:
                 nonlocal last_mask, last_mask_at
@@ -1055,6 +1192,21 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                         print(f"[Dragon Ball] Mantené los dedos en la frente {HOLD_SECONDS[mode]:g} s...")
                     elif hold.since is None:
                         hold_announced = False
+                    if super_saiyan and state.phase == "ready":
+                        charging = power_active(recognizer)
+                        was_charging = power_hold.since is not None
+                        if power_hold.update(charging, now):
+                            if power.transformed:
+                                power_down(now)
+                            else:
+                                transform(now)
+                        elif power_hold.since is not None and not was_charging and power.phase == "off":
+                            charge_sound.play()
+                            print("[Dragon Ball] Cargando ki...")
+                        elif was_charging and power_hold.since is None and power.phase == "charging":
+                            charge_sound.stop(150)
+                if super_saiyan:
+                    power.update(now, power_hold.since if state.phase == "ready" else None)
 
                 age = 0.0
                 if state.vanish_started is not None:
@@ -1088,7 +1240,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     else:
                         # Dopo la sparizione le linee restano sulla silhouette congelata.
                         mask = update_mask(0.05) if age < dragonball.VANISH_AT else last_mask
-                        display = dragonball.render_teleport(camera_frame, background, mask, age)
+                        display = dragonball.render_teleport(golden(camera_frame, now), background, mask, age)
                         done = age >= dragonball.EFFECT_SECONDS
                     if done:
                         state.phase = "vanished"
@@ -1109,7 +1261,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                         done = age >= REAPPEAR_SECONDS
                     else:
                         display = dragonball.render_teleport(
-                            camera_frame, background, mask, max(0.0, dragonball.EFFECT_SECONDS - age)
+                            golden(camera_frame, now), background, mask,
+                            max(0.0, dragonball.EFFECT_SECONDS - age),
                         )
                         done = age >= dragonball.EFFECT_SECONDS
                     if done:
@@ -1118,6 +1271,13 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                         vanished_frame = None
                         log_anchor = None
                         display = camera_frame
+
+                if super_saiyan and state.phase == "ready" and power.phase != "off":
+                    levels = power.levels(now)
+                    hair = hair_mask(hair_tracker, recognizer, camera_frame, now) if levels.hair > 0 else None
+                    display = ssj.render_super_saiyan(
+                        camera_frame, update_mask(0.05), hair, levels, now, aura
+                    )
 
             if virtual_camera is not None:
                 # Zoom e Meet specchiano già l'anteprima locale: chi guarda vede l'immagine dritta.
@@ -1141,6 +1301,12 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
             elif key == ord("v") and background is not None and state.phase in ("ready", "appearing"):
                 log_anchor = None
                 start_effect("vanishing", time.perf_counter())
+            elif key == ord("s") and super_saiyan and background is not None and state.phase == "ready":
+                if power.transformed:
+                    power_down(now)
+                else:
+                    transform(now)
+                power_hold.reset()
             elif key == ord("f"):
                 state.fullscreen = not state.fullscreen
                 set_fullscreen(state.fullscreen)

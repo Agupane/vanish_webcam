@@ -23,11 +23,14 @@ EMPTY_ROOM, PERSON = 50, 170
 
 
 def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
-             person=lambda t: False, keys=None, send_error=None, **overrides):
+             person=lambda t: False, keys=None, send_error=None, power=lambda t: False,
+             mask=None, **overrides):
     """Run the real loop with a fake clock that advances one step per frame.
 
     Before 4 s the camera sees an empty room; afterwards someone is in frame.
     Returns (live frames, preview frames, virtual camera, sound, printed lines).
+    `sound` is the first VanishSound created (teleport/Naruto); the Super Saiyan
+    ones (charge, transform, hum) are in `sound.others`.
     """
     clock = {"t": 0.0, "i": -1}
     count = int(round(seconds / step))
@@ -47,19 +50,30 @@ def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
 
     capture = Mock()
     capture.read.side_effect = read
-    segmenter, recognizer, sound = Mock(), Mock(), Mock()
+    segmenter, recognizer = Mock(), Mock()
+    sounds = []
+
+    def new_sound(*args, **kwargs):
+        sounds.append(Mock())
+        return sounds[-1]
+
     camera = Mock(width=40, height=24)
     camera.send.side_effect = send_error
     displayed, printed = [], []
+    person_mask = np.ones((24, 40), np.float32) if mask is None else mask
     with ExitStack() as mocks:
         mocks.enter_context(patch.object(app, "parse_args", return_value=arguments(mode=mode, **overrides)))
         mocks.enter_context(patch.object(app, "download_models"))
         mocks.enter_context(patch.object(app, "open_camera", return_value=capture))
         mocks.enter_context(patch.object(app, "create_tasks", return_value=(segmenter, recognizer)))
-        mocks.enter_context(patch.object(app, "VanishSound", return_value=sound))
+        mocks.enter_context(patch.object(app, "VanishSound", side_effect=new_sound))
         mocks.enter_context(patch.object(app, "teleport_sound_path", return_value="teleport.wav"))
+        mocks.enter_context(patch.object(app, "ssj_sound_paths", return_value=("c.wav", "t.wav", "h.wav")))
+        mocks.enter_context(patch.object(app, "create_hair_tracker", return_value=None))
+        mocks.enter_context(patch.object(app, "hair_mask", return_value=None))
+        mocks.enter_context(patch.object(app, "power_active", side_effect=lambda *a: power(clock["t"])))
         opening = mocks.enter_context(patch.object(app, "open_virtual_camera", return_value=camera))
-        mocks.enter_context(patch.object(app, "person_mask", return_value=np.ones((24, 40), np.float32)))
+        mocks.enter_context(patch.object(app, "person_mask", return_value=person_mask))
         mocks.enter_context(patch.object(app, "person_in_frame", side_effect=lambda *a: person(clock["t"])))
         mocks.enter_context(patch.object(app, "gesture_active", side_effect=lambda *a: gesture(clock["t"])))
         mocks.enter_context(patch.object(app.time, "perf_counter", side_effect=lambda: clock["t"]))
@@ -86,6 +100,8 @@ def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
         recognizer.close.assert_called_once()
         camera.close.assert_called_once()
         destroy.assert_called_once()
+    sound = sounds[0] if sounds else Mock()
+    sound.others = sounds[1:]
     return frames, displayed, camera, sound, printed
 
 
