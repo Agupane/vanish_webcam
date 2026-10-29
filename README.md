@@ -1,6 +1,7 @@
 # VanishCam — webcam disappearance effects
 
-> **Ubuntu / Linux:** see [README_UBUNTU.md](README_UBUNTU.md) (instalación y uso con Zoom y Google Meet).
+> **This fork:** adds the **Dragon Ball** mode (Instant Transmission, now the default; `--mode goku` also works), held gestures, gesture-based reappearance with effects, Ubuntu support and Spanish messages.
+> Setup and usage (Spanish): [README_UBUNTU.md](README_UBUNTU.md). The sections below are the original README; *Particles* mode is still not implemented.
 
 Video is processed on your computer. It is neither recorded nor sent to a server. The preview window and virtual camera show only the video and effects, without overlaid menus, instructions, or text.
 

@@ -7,21 +7,14 @@ import numpy as np
 
 import vanish_cam as app
 from naruto_effect import (
-    EFFECT_SECONDS, falling_log_anchor, joined_hands_from_landmarks,
-    landed_log_anchor, load_log, overlay_log, render_substitution, substitution_anchor,
+    EFFECT_SECONDS, REAPPEAR_SECONDS, falling_log_anchor, joined_hands_from_landmarks,
+    landed_log_anchor, load_log, overlay_log, render_reappearance, render_substitution,
+    substitution_anchor,
 )
-from test_video_output import arguments
+from test_video_output import run_loop
 
 
 class JoinedHandsTests(unittest.TestCase):
-    def test_joined_hands_start_effect_immediately(self):
-        state = app.AppState(phase="ready")
-        self.assertFalse(app.start_naruto_on_join(state, False, 1.0))
-        self.assertTrue(app.start_naruto_on_join(state, True, 1.1))
-        self.assertEqual(state.phase, "naruto_vanishing")
-        self.assertEqual(state.vanish_started, 1.1)
-        self.assertFalse(app.start_naruto_on_join(state, True, 1.2))
-
     @staticmethod
     def hand(center_x, upward=True):
         points = [SimpleNamespace(x=center_x, y=0.53) for _ in range(21)]
@@ -117,6 +110,20 @@ class EffectTests(unittest.TestCase):
         overlay_log(expected, load_log(), floor)
         np.testing.assert_array_equal(output, expected)
 
+    def test_reappearance_hides_log_in_smoke_then_shows_person(self):
+        frame = np.full((160, 240, 3), 130, np.uint8)
+        background = np.full_like(frame, 35)
+        mask = np.zeros(frame.shape[:2], np.float32)
+        mask[30:150, 90:150] = 1.0
+        anchor = (120, 85, 100)
+        start = render_reappearance(frame, background, mask, load_log(), anchor, 0.02)
+        middle = render_reappearance(frame, background, mask, load_log(), anchor, 0.4)
+        final = render_reappearance(frame, background, mask, load_log(), anchor, REAPPEAR_SECONDS)
+        self.assertTrue(np.any(start != background))  # Log still there.
+        self.assertTrue(np.any(middle != frame) and np.any(middle != background))
+        np.testing.assert_array_equal(final[90, 120], frame[90, 120])
+        np.testing.assert_array_equal(final[5, 5], background[5, 5])
+
 
 class MenuTests(unittest.TestCase):
     def test_keyboard_selection(self):
@@ -126,49 +133,25 @@ class MenuTests(unittest.TestCase):
             mocks.enter_context(patch.object(app.cv2, "imshow"))
             mocks.enter_context(patch.object(app.cv2, "destroyWindow"))
             mocks.enter_context(patch.object(app.cv2, "getWindowProperty", return_value=1))
-            key = mocks.enter_context(patch.object(app.cv2, "waitKey", return_value=ord("2")))
-            self.assertEqual(app.choose_mode(), "naruto")
-            key.return_value = ord("1")
+            key = mocks.enter_context(patch.object(app.cv2, "waitKey", return_value=ord("1")))
+            self.assertEqual(app.choose_mode(), "dragonball")
+            key.return_value = ord("2")
             self.assertEqual(app.choose_mode(), "normal")
+            key.return_value = ord("3")
+            self.assertEqual(app.choose_mode(), "naruto")
 
 
 class NarutoVideoLoopTests(unittest.TestCase):
-    def test_effect_is_sent_to_preview_and_virtual_camera(self):
-        frames = [np.full((80, 120, 3), v, np.uint8) for v in (10, 40, 80, 120, 160)]
-        capture = Mock()
-        capture.read.side_effect = [(True, frame) for frame in frames]
-        segmenter, recognizer = Mock(), Mock()
-        recognizer.recognize_joined_hands.return_value = True
-        sound = Mock()
-        virtual = Mock(width=120, height=80)
-        preview = []
-        with ExitStack() as mocks:
-            mocks.enter_context(patch.object(app, "parse_args", return_value=arguments(mode="naruto")))
-            mocks.enter_context(patch.object(app, "download_models"))
-            mocks.enter_context(patch.object(app, "open_camera", return_value=capture))
-            mocks.enter_context(patch.object(app, "create_tasks", return_value=(segmenter, recognizer)))
-            mocks.enter_context(patch.object(app, "VanishSound", return_value=sound))
-            mocks.enter_context(patch.object(app, "open_virtual_camera", return_value=virtual))
-            mocks.enter_context(patch.object(app, "person_mask", return_value=np.ones((80, 120), np.float32)))
-            mocks.enter_context(patch.object(app.time, "perf_counter", side_effect=(
-                0, 0, 0.1, 4.1, 4.3, 4.35, 4.40, 4.42, 5.05, 5.1, 5.9,
-            )))
-            mocks.enter_context(patch.object(app.cv2, "namedWindow"))
-            mocks.enter_context(patch.object(app.cv2, "resizeWindow"))
-            mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
-            mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: preview.append(frame.copy())))
-            mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=(0, 0, 0, 0, ord("q"))))
-            mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay vietato")))
-            mocks.enter_context(patch("builtins.print"))
-            self.assertEqual(app.run(), 0)
-        self.assertEqual(len(preview), 5)
-        for sent, shown in zip(virtual.send.call_args_list, preview):
-            np.testing.assert_array_equal(sent.args[0], shown)
-        self.assertTrue(np.any(preview[2] != frames[2]))
-        self.assertTrue(np.any(preview[3] != frames[3]))
-        self.assertTrue(np.any(preview[4] != frames[1]))  # Tronco persistente.
-        recognizer.recognize_joined_hands.assert_called_once()
-        sound.play.assert_called_once()
+    def test_log_stays_until_joined_hands_bring_the_person_back(self):
+        held = lambda t: 5.0 <= t < 5.7 or 9.0 <= t < 9.7
+        frames, shown, camera, sound, _ = run_loop(mode="naruto", gesture=held, seconds=12.0)
+        for sent, preview in zip(camera.send.call_args_list, shown):
+            np.testing.assert_array_equal(sent.args[0], preview)
+        np.testing.assert_array_equal(shown[51], frames[51])  # Holding, not yet.
+        self.assertTrue(np.any(shown[80] != frames[0]))  # Log over the empty room.
+        np.testing.assert_array_equal(shown[80], shown[85])  # Frozen while gone.
+        np.testing.assert_array_equal(shown[118], frames[118])  # Back.
+        self.assertEqual(sound.play.call_count, 2)
         sound.close.assert_called_once()
 
 

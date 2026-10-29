@@ -7,8 +7,8 @@ import numpy as np
 import mediapipe as mp
 
 from vanish_cam import (
-    AppState, MultiViewGestureRecognizer, camera_source, find_linux_cameras,
-    recognize_gesture, start_vanish_on_gesture, victory_landmark_score,
+    GestureHold, MultiViewGestureRecognizer, camera_source, find_linux_cameras,
+    mode_name, recognize_gesture, victory_landmark_score,
 )
 
 
@@ -128,26 +128,43 @@ class VictoryGestureTests(unittest.TestCase):
             self.assertEqual(recognize_gesture(recognizer, None, 1000)[0], expected)
 
 
-class ImmediateAnimationTests(unittest.TestCase):
-    def test_first_recognized_v_starts_animation_immediately(self):
-        state = AppState(phase="ready")
-        self.assertTrue(start_vanish_on_gesture(state, "Victory", 0.9, 12.5))
-        self.assertEqual(state.phase, "vanishing")
-        self.assertEqual(state.vanish_started, 12.5)
+class GestureHoldTests(unittest.TestCase):
+    def test_triggers_only_after_holding(self):
+        hold = GestureHold(0.3)
+        self.assertFalse(hold.update(True, 1.0))
+        self.assertFalse(hold.update(True, 1.2))
+        self.assertTrue(hold.update(True, 1.3))
 
-    def test_other_or_weak_gestures_do_not_vanish(self):
-        for name, score in (("No_Hand", 0.0), ("Hand_Detected", 0.0), ("Victory", 0.61)):
-            with self.subTest(name=name, score=score):
-                state = AppState(phase="ready")
-                self.assertFalse(start_vanish_on_gesture(state, name, score, 12.5))
-                self.assertEqual(state.phase, "ready")
-                self.assertIsNone(state.vanish_started)
+    def test_a_single_missed_frame_does_not_restart_the_count(self):
+        hold = GestureHold(0.3)
+        hold.update(True, 1.0)
+        hold.update(False, 1.14)
+        self.assertTrue(hold.update(True, 1.3))
 
-    def test_only_ready_phase_responds(self):
-        for phase in ("calibrating", "vanishing", "vanished"):
-            state = AppState(phase=phase)
-            self.assertFalse(start_vanish_on_gesture(state, "Victory", 0.9, 12.5))
-            self.assertEqual(state.phase, phase)
+    def test_letting_go_restarts_the_count(self):
+        hold = GestureHold(0.3)
+        hold.update(True, 1.0)
+        hold.update(False, 1.5)
+        self.assertFalse(hold.update(True, 1.6))
+        self.assertTrue(hold.update(True, 1.95))
+
+    def test_must_let_go_before_triggering_again(self):
+        hold = GestureHold(0.3)
+        hold.update(True, 1.0)
+        self.assertTrue(hold.update(True, 1.3))
+        for now in (1.5, 2.0, 3.0):
+            self.assertFalse(hold.update(True, now))
+        hold.update(False, 3.5)
+        hold.update(True, 3.6)
+        self.assertTrue(hold.update(True, 3.95))
+
+
+class ModeTests(unittest.TestCase):
+    def test_goku_is_an_alias_for_dragonball(self):
+        self.assertEqual(mode_name("goku"), "dragonball")
+        self.assertEqual(mode_name("Naruto"), "naruto")
+        with self.assertRaises(Exception):
+            mode_name("vegeta")
 
 
 class MultiViewTests(unittest.TestCase):

@@ -10,6 +10,7 @@ import numpy as np
 
 
 EFFECT_SECONDS = 1.45
+REAPPEAR_SECONDS = 0.9
 LOG_PATH = Path(__file__).resolve().parent / "assets" / "substitution_log.png"
 
 
@@ -56,7 +57,7 @@ def substitution_anchor(mask: np.ndarray) -> tuple[int, int, int]:
 def load_log() -> np.ndarray:
     sprite = cv2.imread(str(LOG_PATH), cv2.IMREAD_UNCHANGED)
     if sprite is None or sprite.ndim != 3 or sprite.shape[2] != 4:
-        raise RuntimeError(f"Sprite del tronco non disponibile: {LOG_PATH}")
+        raise RuntimeError(f"No encuentro la imagen del tronco: {LOG_PATH}")
     return sprite
 
 
@@ -186,4 +187,29 @@ def render_substitution(frame: np.ndarray, background: np.ndarray, mask: np.ndar
     overlay_log(output, sprite, moving_anchor, log_opacity,
                 scale=1.15 - min(age, 0.25) * 0.6, cache=log_cache)
     _smoke_layer(output, anchor, age, foreground=True)
+    return output
+
+
+def render_reappearance(frame: np.ndarray, background: np.ndarray, mask: np.ndarray,
+                        sprite: np.ndarray | None, log_anchor: tuple[int, int, int] | None,
+                        age: float, log_cache: dict[int, np.ndarray] | None = None) -> np.ndarray:
+    """Reverse substitution: a puff of smoke hides the log and the person returns."""
+    if age >= REAPPEAR_SECONDS:
+        return (
+            frame.astype(np.float32) * mask[:, :, None]
+            + background.astype(np.float32) * (1.0 - mask[:, :, None])
+        ).astype(np.uint8)
+    person_alpha = mask * float(np.clip((age - 0.15) / 0.2, 0.0, 1.0))
+    output = (
+        frame.astype(np.float32) * person_alpha[:, :, None]
+        + background.astype(np.float32) * (1.0 - person_alpha[:, :, None])
+    ).astype(np.uint8)
+    if sprite is not None and log_anchor is not None and age < 0.15:
+        overlay_log(output, sprite, landed_log_anchor(log_anchor, output.shape[0]),
+                    cache=log_cache)
+    # The smoke runs at the same pace as the vanish, compressed into REAPPEAR_SECONDS.
+    smoke_age = age * EFFECT_SECONDS / REAPPEAR_SECONDS
+    anchor = substitution_anchor(mask)
+    _smoke_layer(output, anchor, smoke_age, foreground=False)
+    _smoke_layer(output, anchor, smoke_age, foreground=True)
     return output
