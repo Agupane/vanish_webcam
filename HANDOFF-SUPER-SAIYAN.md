@@ -108,6 +108,8 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
   E1.6 renders and tuning, CI on Ubuntu + Windows, then the owner gate E1.8.
 - 2026-10-29: E1.6 rendered and tuned. The workflow now also runs on pushes to `feat/**` (no `gh` token on claude-bcn
   to open a PR). Next: CI result on Ubuntu + Windows, then the owner gate E1.8.
+- 2026-10-29: CI on `5af85f8`: `ubuntu-latest` ✅, `windows-latest` ✅ (unit tests + `--self-test` with the real
+  MediaPipe models). macOS jobs still queued (runner issue, §0). **Waiting for the owner gate E1.8.**
 
 ## 0. Start here
 
