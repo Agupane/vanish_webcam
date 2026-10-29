@@ -52,6 +52,13 @@ if [[ -z $device ]]; then
   exit 1
 fi
 
+# A crashed writer can leave 0.12.7 without VIDEO_OUTPUT capabilities; pyvirtualcam rejects it.
+if command -v v4l2-ctl >/dev/null \
+   && ! v4l2-ctl -d "$device" --all 2>/dev/null | grep -q "Video Output"; then
+  echo "[VanishCam] '$device' exists but is not advertising video output (stale v4l2loopback state)." >&2
+  echo "            Reload it: sudo modprobe -r v4l2loopback && sudo modprobe v4l2loopback" >&2
+fi
+
 modules=()
 cleanup_call_audio() {
   local index

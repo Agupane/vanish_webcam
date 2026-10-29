@@ -59,7 +59,7 @@ The installer can be run again at any time; it skips what is already done.
 
 To undo the Ubuntu integration (virtual camera, its DKMS module and the Applications menu entry), run `./uninstall-ubuntu.sh`. It keeps the app folder, `.venv`, `models/` and the shared Secure Boot key; delete the folder afterwards if you also want to remove those.
 
-- **The preview is black or it picked the wrong camera.** You have more than one webcam (for example a disabled laptop camera and a USB one). Run `./vanishcam.sh --list-cameras` to see them, then start with `--camera 2` or `--camera /dev/video2`. Started from a terminal, VanishCam asks which camera to use when it finds several.
+- **The preview is black or it picked the wrong camera.** You have more than one webcam (for example a disabled laptop camera and a USB one). Run `./vanishcam.sh --list-cameras` to see them, then start with `--camera 4` or `--camera /dev/video4`. Started without `--camera`, VanishCam opens a window with a live preview to choose the camera (`A`/`D` or arrows, `Enter`, `Q`).
 
 - **`v4l2loopback-dkms` fails with "Bad return status for module build" (dpkg error code 10 or 1).** Ubuntu 22.04's package (0.12.7) does not build on kernels 6.8 or newer. The installer removes the broken package and builds upstream v4l2loopback 0.13.2 with DKMS instead. If apt keeps failing on it, clean it by hand and run the installer again: `sudo dpkg --purge --force-remove-reinstreq v4l2loopback-dkms && sudo dpkg --configure -a`. The build log is in `/var/lib/dkms/v4l2loopback/0.13.2/build/make.log`.
 - **`modprobe: ERROR: could not insert 'v4l2loopback': Key was rejected by service`.** Secure Boot is on and the module's signing key (`/var/lib/shim-signed/mok/MOK.der`) is not enrolled. The installer registers it with `mokutil --import` and asks you for a one-time password. Reboot, choose *Enroll MOK* → *Continue* → *Yes* on the blue screen, type that password, and run the installer again. Check with `mokutil --test-key /var/lib/shim-signed/mok/MOK.der` (should say "is already enrolled") and `modinfo -F signer v4l2loopback` (should not be empty).
@@ -130,7 +130,7 @@ On Windows, run `install.ps1` again.
 
 Keys (with the VanishCam window focused): `V` vanish, `R` reappear, `SPACE` retake the background photo, `F` fullscreen, `Q` quit.
 
-**Several cameras?** List them with `./vanishcam.sh --list-cameras` and force one with `./vanishcam.sh --camera 2` (or `--camera /dev/video2`). When you start VanishCam from a terminal and it finds more than one camera, it asks which one to use.
+**Several cameras?** When you start VanishCam and it finds more than one, it shows a window with a live preview: use `A`/`D` or the arrow keys to change camera, `Enter` to start and `Q` to cancel. You can also list them with `./vanishcam.sh --list-cameras` and force one with `./vanishcam.sh --camera 4` (or `--camera /dev/video4`).
 
 **In Zoom or Meet**, open VanishCam first and then pick the camera in the video settings:
 

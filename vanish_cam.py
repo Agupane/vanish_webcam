@@ -41,6 +41,7 @@ except ImportError:
 APP_DIR = Path(__file__).resolve().parent
 MODEL_DIR = APP_DIR / "models"
 WINDOW_NAME = "VanishCam - Preview"
+CAMERA_WINDOW = "VanishCam - Choose camera"
 
 SEGMENTER_MODEL = MODEL_DIR / "selfie_segmenter_landscape.tflite"
 GESTURE_MODEL = MODEL_DIR / "gesture_recognizer.task"
@@ -183,36 +184,6 @@ def linux_camera_label(device: str, sysfs: Path = Path("/sys/class/video4linux")
         return ""
 
 
-def choose_linux_camera(
-    cameras: list[str], interactive: bool | None = None, prompt=input
-) -> str:
-    """Ask which webcam to use when there is more than one.
-
-    Without a terminal (desktop launchers, pipes) the first one is used, as before.
-    """
-    if len(cameras) == 1:
-        return cameras[0]
-    print("[Webcam] Cameras found:")
-    for number, device in enumerate(cameras, 1):
-        label = linux_camera_label(device)
-        print(f"  {number}. {device}  {label}".rstrip())
-    if interactive is None:
-        interactive = sys.stdin.isatty()
-    if not interactive:
-        print(f"[Webcam] Using {cameras[0]}; pass --camera to pick another one.")
-        return cameras[0]
-    while True:
-        try:
-            answer = prompt(f"Choose the webcam [1-{len(cameras)}] (Enter = 1): ").strip()
-        except (EOFError, KeyboardInterrupt):
-            answer = ""
-        if not answer:
-            return cameras[0]
-        if answer.isdigit() and 1 <= int(answer) <= len(cameras):
-            return cameras[int(answer) - 1]
-        print("[Webcam] Invalid choice.")
-
-
 def list_linux_cameras() -> None:
     cameras = find_linux_cameras()
     if not cameras:
@@ -347,8 +318,9 @@ def open_virtual_camera(args: argparse.Namespace, width: int, height: int):
     except (ImportError, RuntimeError, OSError, ValueError) as error:
         system = platform.system()
         if system == "Linux":
-            hint = ("Run the installer again or load v4l2loopback with "
-                    "'sudo modprobe v4l2loopback exclusive_caps=1'.")
+            hint = ("If /dev/video10 exists but is not usable, reload the module: "
+                    "'sudo modprobe -r v4l2loopback && sudo modprobe v4l2loopback'. "
+                    "If it is missing, run the installer again.")
         elif system == "Darwin":
             hint = ("Install OBS Studio 30 or later, open it, click 'Start Virtual Camera' and "
                     "then 'Stop Virtual Camera' once, and close it.")
@@ -435,19 +407,10 @@ def download_model(destination: Path, url: str, expected: str | None = None) -> 
     os.replace(temporary, destination)
 
 
-def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCapture:
-    system = platform.system()
-    if index is None:
-        cameras = find_linux_cameras() if system == "Linux" else []
-        if len(cameras) > 1:
-            index = choose_linux_camera(cameras)
-        elif cameras:
-            index = cameras[0]
-        else:
-            index = 0
-        label = linux_camera_label(index) if isinstance(index, str) else ""
-        print(f"[Webcam] Using webcam {index}" + (f" ({label})" if label else "") + ".")
-
+def _open_capture(index: int | str, width: int, height: int,
+                  system: str | None = None) -> cv2.VideoCapture | None:
+    """Open a webcam with the right backend; None if it cannot be opened."""
+    system = system or platform.system()
     if system == "Windows":
         capture = cv2.VideoCapture(index, cv2.CAP_DSHOW)
         if not capture.isOpened():
@@ -464,8 +427,99 @@ def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCa
         capture = cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
     else:
         capture = cv2.VideoCapture(index)
-
     if not capture.isOpened():
+        capture.release()
+        return None
+    capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    return capture
+
+
+def _camera_preview(capture: cv2.VideoCapture | None, width: int, height: int,
+                    mirrored: bool = True) -> np.ndarray:
+    frame = None
+    if capture is not None:
+        ok, frame = capture.read()
+        if not ok:
+            frame = None
+    if frame is None:
+        frame = np.zeros((height, width, 3), np.uint8)
+        frame[:] = (22, 25, 30)
+        cv2.putText(frame, "Camera not available", (max(10, width // 2 - 130), height // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (210, 215, 220), 2, cv2.LINE_AA)
+        return frame
+    if frame.shape[1] != width or frame.shape[0] != height:
+        frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
+    return cv2.flip(frame, 1) if mirrored else frame
+
+
+def choose_camera_window(cameras: list[int | str], width: int, height: int) -> int | str | None:
+    """Modal picker with a live preview: A/D or arrows change, Enter starts, Q cancels."""
+    if not cameras:
+        return None
+    selected = 0
+    capture = _open_capture(cameras[selected], width, height)
+    cv2.namedWindow(CAMERA_WINDOW, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(CAMERA_WINDOW, width, height)
+    try:
+        while True:
+            frame = _camera_preview(capture, width, height)
+            device = cameras[selected]
+            label = linux_camera_label(device) if isinstance(device, str) else ""
+            title = f"{selected + 1}/{len(cameras)}  {device}"
+            if label:
+                title += f"  ({label})"
+            cv2.rectangle(frame, (0, 0), (width, 62), (18, 21, 26), -1)
+            cv2.putText(frame, title, (14, 26), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (238, 242, 245), 1, cv2.LINE_AA)
+            cv2.putText(frame, "A/D or arrows: change   Enter: start   Q: cancel",
+                        (14, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (170, 190, 200), 1, cv2.LINE_AA)
+            cv2.imshow(CAMERA_WINDOW, frame)
+            key = cv2.waitKey(30) & 0xFF
+            if key in (10, 13, 32):
+                return cameras[selected]
+            if key in (ord("q"), ord("Q"), 27):
+                return None
+            next_index = selected
+            if key in (ord("a"), ord("A"), 81, 2):
+                next_index = (selected - 1) % len(cameras)
+            elif key in (ord("d"), ord("D"), 83, 3):
+                next_index = (selected + 1) % len(cameras)
+            elif ord("1") <= key <= ord("9"):
+                choice = key - ord("1")
+                if choice < len(cameras):
+                    next_index = choice
+            if next_index != selected:
+                selected = next_index
+                if capture is not None:
+                    capture.release()
+                capture = _open_capture(cameras[selected], width, height)
+            if cv2.getWindowProperty(CAMERA_WINDOW, cv2.WND_PROP_VISIBLE) < 1:
+                return None
+    finally:
+        if capture is not None:
+            capture.release()
+        cv2.destroyWindow(CAMERA_WINDOW)
+
+
+def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCapture:
+    system = platform.system()
+    if index is None:
+        cameras = find_linux_cameras() if system == "Linux" else []
+        if len(cameras) > 1:
+            index = choose_camera_window(cameras, width, height)
+            if index is None:
+                raise RuntimeError("Camera selection cancelled.")
+        elif cameras:
+            index = cameras[0]
+        else:
+            index = 0
+        label = linux_camera_label(index) if isinstance(index, str) else ""
+        print(f"[Webcam] Using webcam {index}" + (f" ({label})" if label else "") + ".")
+
+    capture = _open_capture(index, width, height, system)
+    if capture is None:
         if system == "Linux":
             list_linux_cameras()
         hint = {
@@ -476,10 +530,6 @@ def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCa
         raise RuntimeError(
             f"Webcam {index} is not available. Close any other apps using it, or {hint}."
         )
-
-    capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     return capture
 
 

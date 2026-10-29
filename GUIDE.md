@@ -33,7 +33,7 @@ The script installs the following:
 ./vanishcam.sh --menu            # choose the mode in a window
 ```
 
-1. The preview window (**VanishCam - Preview**) opens. **Step out of the frame**: after 4 seconds it takes a photo of the empty background. If it still sees you in the frame, it tells you in the terminal and waits 2 more seconds.
+1. If there is more than one webcam, a window with a live preview lets you choose one (`A`/`D` or arrows, `Enter` to start, `Q` to cancel). Then the preview window (**VanishCam - Preview**) opens. **Step out of the frame**: after 4 seconds it takes a photo of the empty background. If it still sees you in the frame, it tells you in the terminal and waits 2 more seconds.
 2. Step back in and make the mode's gesture, **holding it**. You vanish with the effect.
 3. While you're gone, the call sees the background photo. To come back, **lower your hand and repeat the same gesture**: you reappear with the effect in reverse.
 
@@ -96,7 +96,7 @@ If you don't pass `--camera`, the first real webcam is used and the virtual came
 
 - **"Virtual camera not available":** run `sudo modprobe v4l2loopback`. If that fails, check the Secure Boot note.
 - **The webcam is busy:** close any other app using it (Zoom, Meet, Cheese) before starting VanishCam. In Zoom or Meet, *VanishCam* must be selected, not your webcam.
-- **The preview is black or the wrong camera opens:** run `./vanishcam.sh --list-cameras`, then pick the USB camera with `--camera 2` (or its `/dev/videoN` path). From a terminal, VanishCam asks which camera to use when it finds several.
+- **The preview is black or the wrong camera opens:** run `./vanishcam.sh --list-cameras`, then pick the USB camera with `--camera 4` (or its `/dev/videoN` path). Without `--camera`, VanishCam shows a window with a live preview: `A`/`D` or arrows change camera, `Enter` starts, `Q` cancels.
 - **It erases you badly or leaves smudges:** use a static, well-lit background. If the camera moved, press `SPACE`.
 - **The Dragon Ball gesture doesn't register:** your face must be visible (even if the hand covers part of the forehead), with the index and middle fingers together and the ring and pinky fingers folded. With `--gesture-debug` the terminal shows whether it sees the hand, the face and the pose.
 - **It's slow:** it runs on the CPU only. Lower the resolution with `--width 640 --height 360`.

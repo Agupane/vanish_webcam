@@ -23,8 +23,9 @@ All notable changes to this fork are documented here. The format is based on
   the app folder or the shared Secure Boot key.
 - `update.sh` updates an existing install in place (code, dependencies and models) and keeps `.venv`, `models/` and
   the virtual camera config.
-- `--list-cameras` and an interactive picker when several webcams are found: the preview no longer silently uses a
-  disabled laptop camera instead of a USB one.
+- `--list-cameras` and a camera picker window with a live preview when several webcams are found: the preview no
+  longer silently uses a disabled laptop camera instead of a USB one (change with `A`/`D` or arrows, `Enter` to start,
+  `Q` to cancel).
 - `requirements.lock.txt`: pinned dependencies with hashes, installed with `--require-hashes` by every installer and by
   CI. The installers also verify the SHA-256 of the pinned uv installer and accept `VANISHCAM_REF` to install a tag or
   commit instead of `main`.
@@ -52,6 +53,9 @@ All notable changes to this fork are documented here. The format is based on
 - `install-ubuntu.sh` recovers from a broken `v4l2loopback-dkms` package (Ubuntu 22.04 with 6.8+ kernels) by
   building upstream v4l2loopback 0.13.2 with DKMS, and handles Secure Boot module signing / MOK enrollment
   (`89a44cf`, `11c4d3f`).
+- `install-ubuntu.sh` no longer accepts the 0.12.7 module bundled with the 6.8 HWE kernel on kernels 6.8 or newer:
+  it builds 0.13.2 and reloads it, so the virtual camera advertises `VIDEO_OUTPUT` (pyvirtualcam rejected the
+  kernel-provided module with "is not a video output device"). `vanishcam.sh` warns when the device is in that state.
 - CI failures on Windows and Ubuntu (`66136fc`).
 - macOS arm64: MediaPipe 1.0.1 aborted in its Metal helper during `--self-test`. `requirements.txt` now pins MediaPipe
   1.2.0 on every platform except Intel Macs, which keep 0.10.14 (no 1.x x86_64 wheels); the whole CI matrix is green.

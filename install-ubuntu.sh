@@ -219,13 +219,31 @@ distro_package_usable() {
   fi
 }
 
-install_v4l2loopback() {
-  if modinfo v4l2loopback >/dev/null 2>&1; then
+# v4l2loopback 0.12.7 (the one bundled with the 6.8 HWE kernel package) can leave
+# the device without output capabilities, which pyvirtualcam rejects. On kernels
+# 6.8+ only trust a DKMS build (updates/) and build 0.13.2 otherwise.
+v4l2loopback_usable() {
+  local module
+  module="$(modinfo -n v4l2loopback 2>/dev/null)" || return 1
+  [[ -n $module ]] || return 1
+  if printf '%s\n' "$KERNEL" 6.8 | sort -V -C; then
     return 0
   fi
+  case "$module" in
+    */updates/* | */extra/*) return 0 ;;
+  esac
+  return 1
+}
+
+install_v4l2loopback() {
+  if v4l2loopback_usable; then
+    return 0
+  fi
+  # The running kernel may still have the old module loaded.
+  RELOAD_MODULE=true
   if distro_package_usable; then
     say "Installing the virtual camera package (v4l2loopback-dkms)..."
-    if sudo apt-get install -y v4l2loopback-dkms && modinfo v4l2loopback >/dev/null 2>&1; then
+    if sudo apt-get install -y v4l2loopback-dkms && v4l2loopback_usable; then
       return 0
     fi
     say "Ubuntu's v4l2loopback package does not build for kernel $KERNEL."
@@ -238,6 +256,11 @@ install_v4l2loopback() {
 
 load_v4l2loopback() {
   local output
+  if [[ ${RELOAD_MODULE:-false} == true && -d /sys/module/v4l2loopback ]]; then
+    say "Reloading v4l2loopback with the new module: close OBS or any app using a virtual camera."
+    sudo modprobe -r v4l2loopback 2>/dev/null \
+      || warn "Warning: could not unload the old v4l2loopback; it will stay loaded until you reboot."
+  fi
   [[ -e /sys/devices/virtual/video4linux/video$CAM_NR ]] \
     && [[ "$(cat "/sys/devices/virtual/video4linux/video$CAM_NR/name" 2>/dev/null)" == "$CAM_LABEL" ]] \
     && return 0
