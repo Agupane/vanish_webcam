@@ -263,19 +263,24 @@ class AuraRenderer:
         self._mask: np.ndarray | None = None
         self._geometry: AuraGeometry | None = None
 
-    def geometry(self, frame: np.ndarray, mask: np.ndarray, head=None, extra=None) -> AuraGeometry | None:
-        """`extra` returns more silhouette (the golden hair); called only when a new mask arrives."""
+    def geometry(self, frame: np.ndarray, mask: np.ndarray, head=None, extra=None,
+                 cover=None) -> AuraGeometry | None:
+        """`extra` returns more body (the hands) and `cover` what the aura must go around without treating it as
+        the body (the golden hair: the room behind its see-through tips is darkened and gets no rim light, or it
+        shows as pale patches). Both are called only when a new mask arrives."""
         if mask is not self._mask:
             self._mask = mask
-            self._geometry = self._prepare(frame, mask, head, extra)
+            self._geometry = self._prepare(frame, mask, head, extra, cover)
             self.geometry_updates += 1
         return self._geometry
 
-    def _prepare(self, frame, mask, head, extra=None) -> AuraGeometry | None:
-        refined = refine_person_mask(mask, head).astype(np.float32)
+    def _prepare(self, frame, mask, head, extra=None, cover=None) -> AuraGeometry | None:
+        body = refine_person_mask(mask, head).astype(np.float32)
         added = extra() if extra is not None else None
         if added is not None:
-            refined = np.maximum(refined, added)
+            body = np.maximum(body, added)
+        covered = cover() if cover is not None else None
+        refined = body if covered is None else np.maximum(body, covered)
         x, y, w, h = cv2.boundingRect((refined > 0.3).astype(np.uint8))
         if w <= 0 or h <= 0:
             return None
@@ -290,8 +295,11 @@ class AuraRenderer:
         inside = person > 0.5
         binary = inside.astype(np.uint8)
         outside_distance = cv2.distanceTransform(1 - binary, cv2.DIST_L2, 3)
-        inside_distance = cv2.distanceTransform(binary, cv2.DIST_L2, 3)
-        rim = np.clip(1.0 - inside_distance / RIM_WIDTH, 0.0, 1.0) ** 2 * inside
+        body_small = person if covered is None else cv2.resize(body[top:bottom, left:right], small_size,
+                                                               interpolation=cv2.INTER_AREA)
+        body_inside = body_small > 0.5
+        inside_distance = cv2.distanceTransform(body_inside.astype(np.uint8), cv2.DIST_L2, 3)
+        rim = np.clip(1.0 - inside_distance / RIM_WIDTH, 0.0, 1.0) ** 2 * body_inside
         # The light comes from the aura around: stronger at the top of the body.
         rim *= np.linspace(1.0, 0.4, rim.shape[0], dtype=np.float32)[:, None]
         # Fade out before the crop border, except where the crop is the frame border.
@@ -311,7 +319,7 @@ class AuraRenderer:
         edge = (np.concatenate([contour.reshape(-1, 2) for contour in contours])
                 if contours else np.zeros((0, 2), np.int32))
         return AuraGeometry(
-            area=np.s_[top:bottom, left:right], inside_full=refined[top:bottom, left:right] > 0.5,
+            area=np.s_[top:bottom, left:right], inside_full=body[top:bottom, left:right] > 0.5,
             person=person, inside=inside, inside_index=binary * np.uint8(255),
             aura_weight=((1.0 - person) * ~inside).astype(np.float32),
             outside_distance=outside_distance, rim=(rim * RIM_ALPHA).astype(np.float32), fade=fade,
@@ -331,10 +339,10 @@ class AuraRenderer:
         return layers[0] * 0.6 + layers[1] * 0.4
 
     def render(self, frame: np.ndarray, mask: np.ndarray | None, intensity: float, t: float,
-               radius_scale: float = 1.0, head=None, extra=None) -> np.ndarray:
+               radius_scale: float = 1.0, head=None, extra=None, cover=None) -> np.ndarray:
         if mask is None or intensity <= 0.0:
             return frame
-        geometry = self.geometry(frame, mask, head, extra)
+        geometry = self.geometry(frame, mask, head, extra, cover)
         if geometry is None:
             return frame
         power = min(1.0, intensity)
@@ -475,15 +483,16 @@ def render_super_saiyan(frame: np.ndarray, mask: np.ndarray | None,
     output = frame
     if aura is not None and mask is not None:
         def extra() -> np.ndarray | None:
-            # The golden hair (once it is in: the flames rise from the spikes) and the hands join the silhouette.
-            parts = [hands_mask(hands, mask)]
-            if placed is not None and levels.hair >= 0.5:
-                parts.append(ssj_face.HairOverlay.mask_from(placed, frame.shape))
-            elif hair is not None and face is not None and levels.hair >= 0.5:
-                parts.append(hair.mask(face, frame.shape))
-            parts = [part for part in parts if part is not None]
-            return np.maximum.reduce(parts) if parts else None
-        output = aura.render(output, mask, levels.aura, t, levels.radius, head, extra)
+            return hands_mask(hands, mask)  # The hands are body: never painted over.
+
+        def cover() -> np.ndarray | None:
+            # The golden hair, once it is in: the flames rise from the spikes instead of being covered by them.
+            if levels.hair < 0.5:
+                return None
+            if placed is not None:
+                return ssj_face.HairOverlay.mask_from(placed, frame.shape)
+            return hair.mask(face, frame.shape) if hair is not None and face is not None else None
+        output = aura.render(output, mask, levels.aura, t, levels.radius, head, extra, cover)
     # Eyes, brows and the imported hair, on top of the aura (spikes may stick out of the silhouette).
     output = ssj_face.render_face(output, face, levels.hair, hair, eyes, brows, placed)
     if levels.flash > 0.0:

@@ -45,8 +45,9 @@ ANCHOR_WEIGHTS = (1.0, 1.0, 1.0, 1.0, 0.8, 0.6, 0.05, 0.7, 0.7)
 ROOT_BAND = 0.6
 # Changing between the front and side pictures: only when another one is clearly closer, for a moment, with a fade.
 VIEW_SWITCH_MARGIN = 0.04
-VIEW_SWITCH_HOLD = 0.15
-VIEW_FADE_SECONDS = 0.2
+VIEW_SWITCH_HOLD = 0.25
+# Short: during the fade both pictures are see-through and their different spikes show double (owner's video).
+VIEW_FADE_SECONDS = 0.1
 
 EYE_COLOR = np.array((175, 205, 40), np.float32)  # BGR teal-green.
 BROW_COLOR = np.array((40, 200, 255), np.float32)  # BGR gold.

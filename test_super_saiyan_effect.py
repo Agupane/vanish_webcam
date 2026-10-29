@@ -310,6 +310,21 @@ class SilhouetteTests(unittest.TestCase):
         self.assertTrue(np.any(covered[95, 330] != frame[95, 330]))
         np.testing.assert_array_equal(shown[95, 330], frame[95, 330])
 
+    def test_hair_is_gone_around_but_not_lit_like_the_body(self):
+        # The see-through tips of the golden hair showed pale patches: the room behind the hair must be darkened
+        # like the rest, with no rim light, while the aura still goes around it.
+        frame = np.full((240, 320, 3), 120, np.uint8)
+        body = np.zeros((240, 320), np.float32)
+        body[140:240, 120:200] = 1.0
+        hair = np.zeros((240, 320), np.float32)
+        hair[60:140, 110:210] = 1.0
+        output = ssj.AuraRenderer().render(frame, body, 1.0, 0.5, cover=lambda: hair)
+        darkened = cv2.convertScaleAbs(frame, alpha=1.0 - ssj.DARKEN)
+        np.testing.assert_array_equal(output[100, 160], darkened[100, 160])  # Behind the hair: dark, no rim.
+        np.testing.assert_array_equal(output[100, 112], darkened[100, 112])  # Even at the hair's edge.
+        np.testing.assert_array_equal(output[200, 160], frame[200, 160])  # The body is not darkened.
+        self.assertGreater(int(output[50, 160, 2]), int(darkened[50, 160, 2]) + 30)  # Flames above the hair.
+
     def test_hands_mask_follows_the_landmarks_and_the_segmenter(self):
         segmenter = np.zeros((270, 480), np.float32)
         segmenter[:, :340] = 1.0

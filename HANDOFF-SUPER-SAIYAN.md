@@ -285,6 +285,11 @@ charge. Tune in `super_saiyan_effect.py` (`AURA_TONES`, `AURA_RADIUS`, `FLAME_RI
   the tracked face. Not done on purpose: optical-flow tracking between detections (plan P3) — only if the owner still
   sees the hair slide after this. 167 tests; +2 ms/frame on the owner's CPU. Next: owner screen recording (fast head
   turns, talking, power up/down) to tune `SWAY_*`, `FLUTTER_*`, `TRACK_*`.
+- 2026-10-29: owner video (`ssj_hair/video.mp4`, 14 s, version `72c586f`, webcam now AUKEY PC-LM6): consecutive frames
+  move smoothly, no jumps. Two defects: (1) the view crossfade showed both pictures see-through with doubled spikes ->
+  `VIEW_FADE_SECONDS 0.1`, `VIEW_SWITCH_HOLD 0.25`; (2) pale patches at the hair tips: the hair counted as body, so
+  the room behind its see-through tips was not darkened and got the rim light -> `AuraRenderer` `cover` (hair: aura
+  goes around it, room darkened, no rim) separate from `extra` (hands: body).
 
 ## 0. Start here
 

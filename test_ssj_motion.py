@@ -224,12 +224,12 @@ class ViewFadeTests(unittest.TestCase):
 
     def test_fade_blends_then_shows_only_the_new_picture(self):
         self.overlay.select(0.0, 0.0)
-        self.overlay.select(-0.2, 0.1)
-        layers = self.overlay.select(-0.2, 0.1 + ssj_face.VIEW_SWITCH_HOLD)
+        self.overlay.select(-0.2, 0.125)
+        layers = self.overlay.select(-0.2, 0.125 + ssj_face.VIEW_SWITCH_HOLD)
         self.assertEqual([view.name for view, _ in layers], ["front", "left"])
-        middle = self.overlay.select(-0.2, 0.1 + ssj_face.VIEW_SWITCH_HOLD + ssj_face.VIEW_FADE_SECONDS / 2)
+        middle = self.overlay.select(-0.2, 0.125 + ssj_face.VIEW_SWITCH_HOLD + ssj_face.VIEW_FADE_SECONDS / 2)
         self.assertAlmostEqual(middle[1][1], 0.5, places=2)
-        done = self.overlay.select(-0.2, 0.1 + ssj_face.VIEW_SWITCH_HOLD + ssj_face.VIEW_FADE_SECONDS + 0.01)
+        done = self.overlay.select(-0.2, 0.125 + ssj_face.VIEW_SWITCH_HOLD + ssj_face.VIEW_FADE_SECONDS + 0.01)
         self.assertEqual([(view.name, weight) for view, weight in done], [("left", 1.0)])
 
     def test_blend_mixes_alpha(self):
