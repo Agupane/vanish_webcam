@@ -85,8 +85,9 @@ On a headless Linux box MediaPipe needs `libegl1` (`sudo apt install libegl1`), 
 - **Ubuntu:** `install.sh` → `install-ubuntu.sh`, virtual camera via v4l2loopback.
 - **Windows:** `install.ps1`, virtual camera via OBS (pyvirtualcam backend `obs`).
 - **macOS:** `install.sh`, virtual camera via OBS 30+ (the user must start/stop OBS's virtual camera once to install
-  the system extension). MediaPipe 1.x has no wheel for Intel Macs, so `requirements.txt` pins MediaPipe 0.10.14,
-  numpy < 2 and OpenCV 4.10 there via environment markers (untested).
+  the system extension). `requirements.txt` pins MediaPipe 1.2.0 for Apple silicon and other platforms, but 0.10.14
+  for Intel Macs (1.x has no x86_64 wheels), with numpy < 2 and OpenCV 4.10 via environment markers (untested).
+  MediaPipe 1.0.1 aborts on arm64 (`DrishtiMetalHelper`), so do not downgrade below 1.1.
 - `.github/workflows/tests.yml` runs the unit tests and `--self-test` on all of them.
 
 ## Security
