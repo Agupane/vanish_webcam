@@ -219,10 +219,11 @@ def list_linux_cameras() -> None:
         print("[Webcam] No real Linux webcams found (virtual cameras are ignored).")
         return
     print("[Webcam] Cameras:")
-    for number, device in enumerate(cameras, 1):
+    for device in cameras:
         label = linux_camera_label(device)
-        print(f"  {number}. {device}  {label}".rstrip())
-    print("[Webcam] Pick one with --camera 2 or --camera /dev/video2.")
+        number = Path(device).name[5:]
+        print(f"  {device}  {label}  (use --camera {number})".rstrip())
+    print("[Webcam] On Linux, --camera N means /dev/videoN.")
 
 
 def mode_name(value: str) -> str:
@@ -240,7 +241,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--camera", type=camera_source, default=None,
-        help="Webcam number or /dev/videoN path (default: 0; on Linux, the first real webcam)",
+        help="Webcam number or path: on Linux --camera 4 means /dev/video4 "
+             "(default: the first real webcam, or ask when there are several)",
     )
     parser.add_argument(
         "--list-cameras", action="store_true",
@@ -464,6 +466,8 @@ def open_camera(index: int | str | None, width: int, height: int) -> cv2.VideoCa
         capture = cv2.VideoCapture(index)
 
     if not capture.isOpened():
+        if system == "Linux":
+            list_linux_cameras()
         hint = {
             "Linux": "list the webcams with 'v4l2-ctl --list-devices'",
             "Darwin": ("give Terminal camera access in System Settings → "
