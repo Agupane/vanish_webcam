@@ -58,11 +58,11 @@ SSJ_SOUNDS = {
 MODEL_URLS = {
     MULTICLASS_MODEL: (
         "https://storage.googleapis.com/mediapipe-models/image_segmenter/"
-        "selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite"
+        "selfie_multiclass_256x256/float32/1/selfie_multiclass_256x256.tflite"
     ),
     SEGMENTER_MODEL: (
         "https://storage.googleapis.com/mediapipe-models/image_segmenter/"
-        "selfie_segmenter_landscape/float16/latest/"
+        "selfie_segmenter_landscape/float16/1/"
         "selfie_segmenter_landscape.tflite"
     ),
     GESTURE_MODEL: (
@@ -214,6 +214,10 @@ def parse_args() -> argparse.Namespace:
         help="Virtual camera driver",
     )
     parser.add_argument("--virtual-device", help="Virtual device name or path")
+    parser.add_argument(
+        "--audio-device",
+        help="Audio output device for the effect sounds (pygame/SDL device name; default: the system one)",
+    )
     parser.add_argument(
         "--mode", type=mode_name, default=DEFAULT_MODE,
         help="dragonball (default, alias goku), normal or naruto",
@@ -973,10 +977,11 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     resources.callback(recognizer.close)
     log_sprite = load_log() if mode == "naruto" else None
     sound = None
+    audio_device = getattr(args, "audio_device", None)
     if mode == "naruto":
-        sound = VanishSound()
+        sound = VanishSound(device=audio_device)
     elif mode == "dragonball":
-        sound = VanishSound(teleport_sound_path())
+        sound = VanishSound(teleport_sound_path(), device=audio_device)
     if sound is not None:
         resources.callback(sound.close)
     # Super Saiyan: Dragon Ball only; reuses the teleport detector's inference.
@@ -991,7 +996,9 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         if hair_tracker is not None:
             resources.callback(hair_tracker.close)
         # Created after the teleport sound, which owns the mixer and is closed last.
-        charge_sound, transform_sound, hum_sound = (VanishSound(path) for path in ssj_sound_paths())
+        charge_sound, transform_sound, hum_sound = (
+            VanishSound(path, device=audio_device) for path in ssj_sound_paths()
+        )
         for extra in (charge_sound, transform_sound, hum_sound):
             resources.callback(extra.close)
     resources.callback(cv2.destroyAllWindows)

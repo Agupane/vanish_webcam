@@ -14,6 +14,7 @@ def arguments(**overrides):
         camera=0, width=960, height=540, fps=30.0, fullscreen=False,
         no_mirror=True, mirror_output=False, virtual_camera=None, virtual_backend=None,
         virtual_device=None, gesture_debug=False, mode="normal", menu=False,
+        audio_device=None,
     )
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -55,6 +56,7 @@ def run_loop(mode="normal", seconds=13.0, step=0.1, gesture=lambda t: False,
 
     def new_sound(*args, **kwargs):
         sounds.append(Mock())
+        sounds[-1].created_with = (args, kwargs)
         return sounds[-1]
 
     camera = Mock(width=40, height=24)
@@ -187,6 +189,11 @@ class VideoLoopTests(unittest.TestCase):
         _, shown, camera, _, _ = run_loop(no_mirror=False, seconds=5.0)
         for sent, preview in zip(camera.send.call_args_list, shown):
             np.testing.assert_array_equal(sent.args[0], preview[:, ::-1])
+
+    def test_audio_device_is_forwarded_to_every_sound(self):
+        _, _, _, sound, _ = run_loop(mode="dragonball", seconds=0.2, audio_device="Fixture output")
+        for player in (sound, *sound.others):
+            self.assertEqual(player.created_with[1]["device"], "Fixture output")
 
     def test_all_devices_close_on_send_error(self):
         run_loop(send_error=RuntimeError("send failed"), seconds=1.0)

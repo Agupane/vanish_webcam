@@ -257,6 +257,26 @@ class SoundTests(unittest.TestCase):
             player.close()
             mixer.quit.assert_called_once()
 
+    def test_vanish_sound_uses_the_requested_audio_device(self):
+        mixer = Mock()
+        mixer.get_init.return_value = None
+        with tempfile.NamedTemporaryFile(suffix=".wav") as file, \
+                patch.dict("sys.modules", pygame=SimpleNamespace(mixer=mixer)):
+            player = VanishSound(Path(file.name), device="BlackHole 2ch")
+            mixer.init.assert_called_once_with(
+                frequency=44100, size=-16, channels=2, buffer=256, devicename="BlackHole 2ch")
+            player.close()
+
+    def test_vanish_sound_does_not_reinitialize_a_shared_mixer(self):
+        mixer = Mock()
+        mixer.get_init.return_value = (44100, -16, 2)
+        with tempfile.NamedTemporaryFile(suffix=".wav") as file, \
+                patch.dict("sys.modules", pygame=SimpleNamespace(mixer=mixer)):
+            player = VanishSound(Path(file.name), device="BlackHole 2ch")
+            mixer.init.assert_not_called()
+            player.close()
+            mixer.quit.assert_not_called()
+
 
 def person_in_middle():
     mask = np.zeros((24, 40), np.float32)

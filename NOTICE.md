@@ -23,7 +23,8 @@ These files did not exist upstream:
 - `dragonball_effect.py`, `super_saiyan_effect.py` and their tests `test_dragonball_effect.py`,
   `test_super_saiyan_effect.py`. Upstream's README described a "Goku" mode, but no code for it was ever published
   upstream; this implementation is new (`git blame -C` matches only a few generic lines, such as imports, to upstream).
-- Installers and launchers: `install.sh`, `install-ubuntu.sh`, `install.ps1`, `vanishcam.sh`, `vanishcam.bat`.
+- Installers and launchers: `install.sh`, `install-ubuntu.sh`, `uninstall-ubuntu.sh`, `install.ps1`, `vanishcam.sh`,
+  `vanishcam.bat`, `BUILD_MACOS.sh`, `VanishCam.macos.spec`, `requirements.lock.txt`.
 - Docs and project files: `GUIDE.md`, `AGENTS.md`, `LICENSE`, `NOTICE.md`, `CHANGELOG.md`, `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, see its attribution section), `SECURITY.md`, `.editorconfig`, and
   everything under `.github/`.

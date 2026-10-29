@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install --require-hashes -r requirements.lock.txt
 
       - name: Unit tests
         run: python -m unittest discover -v -p "test_*.py"
@@ -44,7 +44,7 @@ jobs:
 
       - name: Installer scripts syntax
         if: runner.os != 'Windows'
-        run: bash -n install.sh && bash -n install-ubuntu.sh && bash -n vanishcam.sh
+        run: bash -n install.sh && bash -n install-ubuntu.sh && bash -n uninstall-ubuntu.sh && bash -n vanishcam.sh && bash -n BUILD_MACOS.sh
 
       - name: Installer script syntax (PowerShell)
         if: runner.os == 'Windows'

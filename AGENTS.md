@@ -20,10 +20,13 @@ result to a virtual camera for Zoom / Google Meet. Fork of `Nicovic17/vanish_web
 | `test_*.py` | unittest suite; `run_loop()` in `test_video_output.py` drives the real loop with a fake clock |
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
 | `install-ubuntu.sh` | apt packages, v4l2loopback (falls back to building a pinned upstream commit with DKMS), venv, models, `.desktop` |
+| `uninstall-ubuntu.sh` | Undoes the Ubuntu integration (module config, DKMS build, menu entry); keeps the app folder and the MOK key |
+| `requirements.txt` / `requirements.lock.txt` | Human-edited ranges / uv-generated lock with hashes, used by the installers and CI |
 | `install.ps1`, `vanishcam.bat` | Windows installer (uv + winget OBS + desktop shortcut) and launcher |
 | `vanishcam.sh` | Launcher for Linux (v4l2loopback device named VanishCam; `--call-audio` builds a PulseAudio/PipeWire virtual mic) and macOS (OBS) |
 | `AVVIA_*.bat` | Upstream launcher names, now delegating to `vanishcam.bat` |
-| `VanishCam.spec`, `BUILD_WINDOWS.bat` | Upstream PyInstaller build; not maintained here |
+| `VanishCam.spec`, `BUILD_WINDOWS.bat` | Upstream PyInstaller build, updated for the fork's files; untested |
+| `VanishCam.macos.spec`, `BUILD_MACOS.sh` | Experimental macOS `.app` build; never run on a Mac |
 | `README_ORIGINAL.md` | Upstream README (English), kept for reference |
 | `LICENSE`, `NOTICE.md` | MIT for this fork's contributions; NOTICE lists upstream (unlicensed) files and third-party licenses |
 | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`, `.github/` | Contributor docs, templates and CI |
@@ -49,6 +52,7 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
   the hum.
 - **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear, `S` Super Saiyan on/off (Dragon Ball), `SPACE` recalibrate, `F` fullscreen, `Q`/`ESC` quit.
 - **Mirroring:** the preview is mirrored; the virtual camera gets the unmirrored image unless `--mirror-output`.
+- **Audio:** `--audio-device NAME` is passed to `pygame.mixer.init(devicename=...)` for the effect sounds (ignored by the `ffplay` fallback and when another sound already owns the mixer, which is the normal case: the first sound initializes it with the device).
 
 ## Rules
 
@@ -76,6 +80,9 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m unittest discover -p 'test_*.py'
 ```
+
+After editing `requirements.txt`, regenerate the lock the installers and CI use:
+`uv pip compile requirements.txt --universal --generate-hashes -o requirements.lock.txt`.
 
 On a headless Linux box MediaPipe needs `libegl1` (`sudo apt install libegl1`), otherwise the tests that create
 `mp.Image` fail with `libEGL.so.1` errors.

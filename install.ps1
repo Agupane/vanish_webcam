@@ -4,6 +4,11 @@
 # ASCII only on purpose: Windows PowerShell 5.1 reads BOM-less .ps1 files as ANSI.
 $ErrorActionPreference = "Stop"
 $Repo = "Agupane/vanish_webcam"
+# Branch, tag or commit to install. Pinning a tag ($env:VANISHCAM_REF = "v1.0.0") is safer than main.
+$Ref = if ($env:VANISHCAM_REF) { $env:VANISHCAM_REF } else { "main" }
+# Versioned uv installer (its checksum is verified before running it).
+$UvVersion = "0.13.6"
+$UvInstallerSha256 = "d00580051699bee58a2e2d9b925f45788b35f7e0fff7966fd5bedfc3c547dc7d"
 
 function Say($Message) { Write-Host "`n[VanishCam] $Message" -ForegroundColor Cyan }
 function Check($What) { if ($LASTEXITCODE -ne 0) { throw "Failed: $What" } }
@@ -14,22 +19,31 @@ if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "vanish_cam.py"))) {
     $AppDir = $PSScriptRoot
 } else {
     $AppDir = Join-Path $HOME "VanishCam"
-    Say "Downloading VanishCam to $AppDir..."
+    Say "Downloading VanishCam (${Ref}) to $AppDir..."
     $zip = Join-Path $env:TEMP "vanishcam.zip"
     $unpacked = Join-Path $env:TEMP "vanishcam-src"
-    Invoke-WebRequest "https://github.com/$Repo/archive/refs/heads/main.zip" -OutFile $zip -UseBasicParsing
+    Invoke-WebRequest "https://github.com/${Repo}/archive/${Ref}.zip" -OutFile $zip -UseBasicParsing
     if (Test-Path $unpacked) { Remove-Item $unpacked -Recurse -Force }
     Expand-Archive $zip $unpacked
     New-Item -ItemType Directory -Force $AppDir | Out-Null
+    $Src = Get-ChildItem $unpacked -Directory | Select-Object -First 1
     # Copies over a previous install without deleting .venv or models\.
-    Copy-Item (Join-Path $unpacked "vanish_webcam-main\*") $AppDir -Recurse -Force
+    Copy-Item (Join-Path $Src.FullName "*") $AppDir -Recurse -Force
     Remove-Item $zip, $unpacked -Recurse -Force
 }
 Set-Location $AppDir
 
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Say "Installing uv (installs Python without asking for administrator rights)..."
-    powershell -ExecutionPolicy Bypass -NoProfile -Command "irm https://astral.sh/uv/install.ps1 | iex"
+    $UvInstaller = Join-Path $env:TEMP "uv-installer.ps1"
+    Invoke-WebRequest "https://github.com/astral-sh/uv/releases/download/${UvVersion}/uv-installer.ps1" `
+        -OutFile $UvInstaller -UseBasicParsing
+    if ((Get-FileHash $UvInstaller -Algorithm SHA256).Hash -ne $UvInstallerSha256.ToUpperInvariant()) {
+        Remove-Item $UvInstaller -Force
+        throw "The uv installer does not match the expected checksum. Not running it."
+    }
+    Invoke-Expression (Get-Content $UvInstaller -Raw)
+    Remove-Item $UvInstaller -Force
     Check "install uv"
     $env:Path = "$HOME\.local\bin;$env:Path"
 }
@@ -37,7 +51,7 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 Say "Setting up Python and the dependencies..."
 $Python = Join-Path $AppDir ".venv\Scripts\python.exe"
 if (-not (Test-Path $Python)) { uv venv --python 3.12 .venv; Check "create the Python environment" }
-uv pip install --python $Python -r requirements.txt
+uv pip install --python $Python --require-hashes -r requirements.lock.txt
 Check "install the dependencies"
 
 Say "Downloading MediaPipe models..."

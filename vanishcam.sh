@@ -14,14 +14,23 @@ if [[ ! -x "$PYTHON" ]]; then
 fi
 
 call_audio=false
+audio_device=false
 args=()
 for arg in "$@"; do
   if [[ $arg == --call-audio ]]; then
     call_audio=true
+  elif [[ $arg == --audio-device || $arg == --audio-device=* ]]; then
+    audio_device=true
+    args+=("$arg")
   else
     args+=("$arg")
   fi
 done
+
+if [[ $call_audio == true && $audio_device == true ]]; then
+  echo "[VanishCam] Use either --call-audio (Linux) or --audio-device, not both." >&2
+  exit 1
+fi
 
 if [[ "$(uname -s)" == Darwin ]]; then
   [[ $call_audio == true ]] && echo "[VanishCam] --call-audio is not available on macOS yet (see README)." >&2

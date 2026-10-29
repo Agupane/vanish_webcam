@@ -312,7 +312,7 @@ if [[ -x "$VENV_DIR/bin/python" ]] && ! "$VENV_DIR/bin/python" -m pip --version 
 fi
 [[ -x "$VENV_DIR/bin/python" ]] || python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/python" -m pip install --upgrade pip
-"$VENV_DIR/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
+"$VENV_DIR/bin/python" -m pip install --require-hashes -r "$APP_DIR/requirements.lock.txt"
 
 say "Downloading MediaPipe models..."
 "$VENV_DIR/bin/python" -c "import sys; sys.path.insert(0, sys.argv[1]); import vanish_cam; vanish_cam.download_models('normal')" "$APP_DIR"

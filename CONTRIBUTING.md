@@ -22,6 +22,9 @@ python -m venv .venv
 .venv/bin/pip install -r requirements.txt     # Windows: .venv\Scripts\pip install -r requirements.txt
 ```
 
+The installers and CI use `requirements.lock.txt` (pinned, with hashes). If you change `requirements.txt`, regenerate it
+with `uv pip compile requirements.txt --universal --generate-hashes -o requirements.lock.txt`.
+
 On Linux you can also run `./install-ubuntu.sh`, which sets up the virtual camera too. On a headless Linux box,
 MediaPipe needs `libegl1` and `libgles2` (`sudo apt install libegl1 libgles2`).
 

@@ -16,7 +16,16 @@ All notable changes to this fork are documented here. The format is based on
   launchers `vanishcam.sh` / `vanishcam.bat`, and CI that runs the tests and `--self-test` on Ubuntu, Windows, macOS
   arm64 and macOS Intel (`144ceb7`).
 - `--call-audio` on Linux: a PulseAudio/PipeWire virtual microphone (VanishCam-Mic) that mixes the real microphone
-  with the effect sounds.
+  with the effect sounds (`144ceb7`).
+- `--audio-device NAME` sends the effect sounds to a specific output device (VB-Cable on Windows, BlackHole on macOS),
+  so a call can pick them up; documented in the README and the guide.
+- `uninstall-ubuntu.sh` undoes the Ubuntu integration (virtual camera config, DKMS build, menu entry) without touching
+  the app folder or the shared Secure Boot key.
+- `requirements.lock.txt`: pinned dependencies with hashes, installed with `--require-hashes` by every installer and by
+  CI. The installers also verify the SHA-256 of the pinned uv installer and accept `VANISHCAM_REF` to install a tag or
+  commit instead of `main`.
+- Experimental macOS `.app` build (`VanishCam.macos.spec`, `BUILD_MACOS.sh`); the Windows PyInstaller spec now bundles
+  the face model, the Super Saiyan model and the new modules.
 - Dragon Ball mode, now the default: Instant Transmission pose (two fingers on the forehead, held 1 s) with speed lines,
   a flash and a synthesized teleport sound (`686a50b`).
 - Ubuntu support: the virtual camera goes through v4l2loopback (device named VanishCam) for Zoom and Google Meet,
@@ -28,8 +37,8 @@ All notable changes to this fork are documented here. The format is based on
 - Gestures must be held and released before they trigger again, and the same gesture vanishes and brings the person
   back, with reappear effects (`686a50b`).
 - Better background capture: the background is the median of the last frames of calibration, and sampling is pushed
-  back while a person is in the frame.
-- The virtual camera gets the unmirrored image (the preview stays mirrored) unless `--mirror-output`.
+  back while a person is in the frame (`686a50b`).
+- The virtual camera gets the unmirrored image (the preview stays mirrored) unless `--mirror-output` (`686a50b`).
 - The whole repository (UI messages, docs, comments, tests) is in English; the upstream README is kept as
   `README_ORIGINAL.md` and the upstream `AVVIA_*.bat` launchers delegate to `vanishcam.bat` (`dcc9c90`, `144ceb7`).
 - `requirements.txt` pins version ranges, with MediaPipe 0.10.14 / numpy < 2 / OpenCV 4.10 on Intel Macs (`144ceb7`).
@@ -48,6 +57,9 @@ All notable changes to this fork are documented here. The format is based on
 
 - Downloaded MediaPipe models are verified against SHA-256 hashes before use (`144ceb7`).
 - The v4l2loopback source built by the installer is pinned to the commit of its release tag (`144ceb7`).
+- The MediaPipe model URLs are now versioned (`/1/` instead of `/latest/`), so a new upstream version cannot silently
+  change what is downloaded. The uv installer is downloaded from a versioned release URL and checked against a pinned
+  SHA-256 before it runs, and dependencies come from a hashed lock file.
 
 ## Upstream baseline - 2026-10-24
 

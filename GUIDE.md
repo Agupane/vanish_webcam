@@ -53,7 +53,7 @@ A stray single-frame gesture no longer makes you vanish, and after each effect y
 - **Teleport:** if you teleport while transformed, you come back transformed.
 - **Golden hair:** uses an extra Google model downloaded the first time (16 MB). Without it, or if you're bald or wearing a cap, you only get the aura.
 - **Your own sounds:** put `assets/ssj_charge.MP3`, `assets/ssj_transform.MP3` or `assets/ssj_aura.MP3` and those are used instead of the generated ones.
-- **The sound plays through your speakers:** it doesn't travel through the virtual camera. Others in the call only hear it if your microphone picks it up (on Ubuntu, `--call-audio` fixes that; see [README.md](README.md)).
+- **The sound plays through your speakers:** it doesn't travel through the virtual camera. Others in the call only hear it if your microphone picks it up (on Ubuntu, `--call-audio` fixes that; on Windows and macOS send it to a virtual cable with `--audio-device`; see [README.md](README.md)).
 
 | Key (with the preview window focused) | Action |
 |---|---|
@@ -84,6 +84,7 @@ Chrome only lists the camera once it's receiving video, so the app has to be sta
 ./vanishcam.sh --mirror-output               # send the mirrored image to Zoom/Meet
 ./vanishcam.sh --gesture-debug               # print the detected gesture in the terminal
 ./vanishcam.sh --call-audio                  # virtual microphone with your voice + the effects
+./vanishcam.sh --audio-device "BlackHole 2ch" # play the effects into a virtual cable (Windows/macOS)
 ```
 
 If you don't pass `--camera`, the first real webcam is used and the virtual camera is ignored.
@@ -95,6 +96,7 @@ If you don't pass `--camera`, the first real webcam is used and the virtual came
 - **It erases you badly or leaves smudges:** use a static, well-lit background. If the camera moved, press `SPACE`.
 - **The Dragon Ball gesture doesn't register:** your face must be visible (even if the hand covers part of the forehead), with the index and middle fingers together and the ring and pinky fingers folded. With `--gesture-debug` the terminal shows whether it sees the hand, the face and the pose.
 - **It's slow:** it runs on the CPU only. Lower the resolution with `--width 640 --height 360`.
+- **To uninstall (Ubuntu):** run `./uninstall-ubuntu.sh`. It removes the virtual camera configuration, the DKMS module built by the installer and the Applications menu entry, but keeps the app folder.
 
 ## Differences from the original
 

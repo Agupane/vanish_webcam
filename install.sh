@@ -5,10 +5,41 @@
 set -euo pipefail
 
 REPO="Agupane/vanish_webcam"
+# Branch, tag or commit to install. Pinning a tag (VANISHCAM_REF=v1.0.0) is safer than main.
+REF="${VANISHCAM_REF:-main}"
 TARGET="${VANISHCAM_DIR:-$HOME/VanishCam}"
+# Versioned uv installer (its checksum is verified before running it).
+UV_VERSION="0.13.6"
+UV_INSTALLER_SHA256="f7a56e7afaec49a3bcbc3ac3cdbe917e7c6ce30e0d815308a12e531aa5ef23b7"
 
 say() { printf '\n[VanishCam] %s\n' "$*"; }
 fail() { printf '\n[VanishCam] %s\n' "$*" >&2; exit 1; }
+
+sha256() {
+  if command -v sha256sum >/dev/null; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+install_uv() {
+  local tmp
+  tmp="$(mktemp -d)"
+  say "Installing uv (installs Python without asking for administrator rights)..."
+  if ! curl -fsSL "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-installer.sh" \
+       -o "$tmp/uv-installer.sh"; then
+    rm -rf "$tmp"
+    fail "Could not download the uv installer."
+  fi
+  if [[ "$(sha256 "$tmp/uv-installer.sh")" != "$UV_INSTALLER_SHA256" ]]; then
+    rm -rf "$tmp"
+    fail "The uv installer does not match the expected checksum. Not running it."
+  fi
+  bash "$tmp/uv-installer.sh" || { rm -rf "$tmp"; fail "uv installation failed."; }
+  rm -rf "$tmp"
+  export PATH="$HOME/.local/bin:$PATH"
+}
 
 install_macos() {
   local app_dir="$1" launcher
@@ -18,14 +49,12 @@ install_macos() {
   fi
 
   if ! command -v uv >/dev/null; then
-    say "Installing uv (installs Python without asking for administrator rights)..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.local/bin:$PATH"
+    install_uv
   fi
 
   say "Setting up Python and the dependencies..."
   [[ -x .venv/bin/python ]] || uv venv --python 3.12 .venv
-  uv pip install --python .venv/bin/python -r requirements.txt
+  uv pip install --python .venv/bin/python --require-hashes -r requirements.lock.txt
 
   say "Downloading MediaPipe models..."
   .venv/bin/python -c "import sys; sys.path.insert(0, sys.argv[1]); import vanish_cam; vanish_cam.download_models('normal')" "$app_dir"
@@ -69,12 +98,18 @@ main() {
 
   # Run via curl | bash: download the repo and continue from there.
   if [[ -z $script_dir || ! -f "$script_dir/vanish_cam.py" ]]; then
-    say "Downloading VanishCam to $TARGET..."
+    say "Downloading VanishCam ($REF) to $TARGET..."
     tmp="$(mktemp -d)"
-    curl -fsSL "https://github.com/$REPO/archive/refs/heads/main.tar.gz" | tar -xz -C "$tmp"
+    if ! curl -fsSL "https://github.com/$REPO/archive/$REF.tar.gz" -o "$tmp/vanishcam.tar.gz"; then
+      rm -rf "$tmp"
+      fail "Could not download $REPO ($REF)."
+    fi
     mkdir -p "$TARGET"
-    # Copies over a previous install without deleting .venv or models/.
-    cp -R "$tmp"/vanish_webcam-main/. "$TARGET"/
+    # Extracts over a previous install without deleting .venv or models/.
+    if ! tar -xzf "$tmp/vanishcam.tar.gz" -C "$TARGET" --strip-components=1; then
+      rm -rf "$tmp"
+      fail "The downloaded archive is not valid."
+    fi
     rm -rf "$tmp"
     chmod +x "$TARGET"/*.sh
     exec bash "$TARGET/install.sh"

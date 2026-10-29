@@ -11,7 +11,9 @@ if errorlevel 1 (
 py -3 -c "import PyInstaller, cv2, mediapipe, numpy, pyvirtualcam, pygame" >nul 2>nul
 if errorlevel 1 (
   echo Installing the build dependencies...
-  py -3 -m pip install -r requirements.txt "pyinstaller>=6,<7"
+  py -3 -m pip install --require-hashes -r requirements.lock.txt
+  if errorlevel 1 goto :error
+  py -3 -m pip install "pyinstaller>=6,<7"
   if errorlevel 1 goto :error
 )
 

@@ -57,6 +57,8 @@ It asks for your `sudo` password to install the packages and the **VanishCam** v
 
 The installer can be run again at any time; it skips what is already done.
 
+To undo the Ubuntu integration (virtual camera, its DKMS module and the Applications menu entry), run `./uninstall-ubuntu.sh`. It keeps the app folder, `.venv`, `models/` and the shared Secure Boot key; delete the folder afterwards if you also want to remove those.
+
 - **`v4l2loopback-dkms` fails with "Bad return status for module build" (dpkg error code 10 or 1).** Ubuntu 22.04's package (0.12.7) does not build on kernels 6.8 or newer. The installer removes the broken package and builds upstream v4l2loopback 0.13.2 with DKMS instead. If apt keeps failing on it, clean it by hand and run the installer again: `sudo dpkg --purge --force-remove-reinstreq v4l2loopback-dkms && sudo dpkg --configure -a`. The build log is in `/var/lib/dkms/v4l2loopback/0.13.2/build/make.log`.
 - **`modprobe: ERROR: could not insert 'v4l2loopback': Key was rejected by service`.** Secure Boot is on and the module's signing key (`/var/lib/shim-signed/mok/MOK.der`) is not enrolled. The installer registers it with `mokutil --import` and asks you for a one-time password. Reboot, choose *Enroll MOK* → *Continue* → *Yes* on the blue screen, type that password, and run the installer again. Check with `mokutil --test-key /var/lib/shim-signed/mok/MOK.der` (should say "is already enrolled") and `modinfo -F signer v4l2loopback` (should not be empty).
 - **`linux-headers-… is not available` or "kernel headers are missing".** Your running kernel is older than the ones in the archive. Run `sudo apt update && sudo apt full-upgrade`, reboot, and run the installer again.
@@ -126,13 +128,23 @@ The full guide (options, effects, troubleshooting) is in [GUIDE.md](GUIDE.md); a
 Effect sounds play through **your speakers**: the virtual camera carries video only. Others hear them only if your microphone picks them up, and Zoom/Meet noise suppression often removes them.
 
 - **Ubuntu:** start with `./vanishcam.sh --call-audio`. It creates a virtual microphone **VanishCam-Mic** that mixes your real microphone with the effects (and you still hear them yourself). In Zoom/Meet pick that microphone and lower noise suppression (Zoom: Settings → Audio → Suppress background noise: Low, or enable "Original sound for musicians"). It is torn down automatically when VanishCam closes.
-- **Windows and macOS:** not automated yet. It needs a virtual audio cable ([VB-Cable](https://vb-audio.com/Cable/) on Windows, [BlackHole](https://github.com/ExistentialAudio/BlackHole) on macOS) with VanishCam playing the effects into it; it's on the to-do list.
+- **Windows:** install [VB-Cable](https://vb-audio.com/Cable/) and start VanishCam with `--audio-device "CABLE Input (VB-Audio Virtual Cable)"` (the name must match). In Windows' sound settings open the CABLE Input properties, **Listen** tab and enable "Listen to this device" with your real speakers as the target, so you still hear the effects. In Zoom/Meet pick **CABLE Output** as the microphone and lower noise suppression.
+- **macOS:** install [BlackHole](https://github.com/ExistentialAudio/BlackHole) and start VanishCam with `--audio-device "BlackHole 2ch"`. To keep hearing the effects, create an Aggregate Device or a Multi-Output Device in *Audio MIDI Setup* that includes your speakers and BlackHole. In Zoom/Meet pick **BlackHole 2ch** as the microphone and lower noise suppression.
+
+To list the exact device names, run this in the app folder (`.venv/bin/python` on Ubuntu/macOS, `.venv\Scripts\python.exe` on Windows):
+
+```bash
+.venv/bin/python -c "import pygame; pygame.init(); from pygame._sdl2 import audio; print(audio.get_audio_device_names(False))"
+```
+
+`--audio-device` only works when pygame plays the sounds; the `ffplay` fallback ignores it.
 
 ## Security and privacy
 
 - Video is processed only on your computer; VanishCam doesn't save images or open network connections, except for the first download of the Google MediaPipe models, which is verified with SHA-256.
 - On Linux, if the virtual camera has to be built, the installer verifies the exact source commit before building it.
-- The one-line installers (`curl | bash`, `irm | iex`) run whatever is on this repo's `main` branch: if you prefer, clone the repo, review the scripts and run them by hand.
+- The one-line installers (`curl | bash`, `irm | iex`) run whatever is on this repo's `main` branch by default: if you prefer, clone the repo, review the scripts and run them by hand. Both accept `VANISHCAM_REF` (a tag or commit, e.g. `VANISHCAM_REF=v1.0.0`) to install an exact version and use a pinned uv installer whose SHA-256 is verified before running it.
+- Dependencies install from `requirements.lock.txt`, pinned with hashes (`--require-hashes`).
 
 Security problems: please report them privately as described in [SECURITY.md](SECURITY.md).
 
@@ -143,6 +155,12 @@ Context for agents and developers in [AGENTS.md](AGENTS.md). Tests:
 ```bash
 .venv/bin/python -m unittest discover -p 'test_*.py'
 ```
+
+After editing `requirements.txt`, regenerate the hashed lock the installers use:
+`uv pip compile requirements.txt --universal --generate-hashes -o requirements.lock.txt`.
+
+Packaging is experimental: `BUILD_WINDOWS.bat` and `BUILD_MACOS.sh` build a standalone app, and neither has been run
+on real hardware yet.
 
 ## Contributing
 

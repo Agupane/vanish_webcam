@@ -12,7 +12,7 @@ SOUND_PATH = Path(__file__).resolve().parent / "assets" / "vanish.MP3"
 
 
 class VanishSound:
-    def __init__(self, path: Path = SOUND_PATH):
+    def __init__(self, path: Path = SOUND_PATH, device: str | None = None):
         if not path.is_file():
             raise RuntimeError(f"Audio file not found: {path}")
         self.path = path
@@ -32,7 +32,10 @@ class VanishSound:
         self.owns_mixer = mixer.get_init() is None
         try:
             if self.owns_mixer:
-                mixer.init(frequency=44100, size=-16, channels=2, buffer=256)
+                options = dict(frequency=44100, size=-16, channels=2, buffer=256)
+                if device:
+                    options["devicename"] = device
+                mixer.init(**options)
             self.sound = mixer.Sound(str(path))  # Decode once, before opening the webcam.
         except Exception as error:
             if self.owns_mixer:
