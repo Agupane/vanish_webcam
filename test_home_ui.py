@@ -54,18 +54,23 @@ class LayoutTests(unittest.TestCase):
         buttons = home_ui.layout(True, True)
         image = home_ui.render_home(settings, buttons, 2, "Not set up", ["one", "two"])
         self.assertEqual(image.shape, (home_ui.HEIGHT, home_ui.WIDTH, 3))
+        hovered = home_ui.render_home(settings, buttons, 2, "Not set up", ["one", "two"], hover="check")
+        x, y = center(buttons, "check")
+        self.assertGreater(int(hovered[y - 15, x - 60].sum()), int(image[y - 15, x - 60].sum()))
 
 
 class HomeLoopTests(unittest.TestCase):
     def run_home(self, events, settings=None, **actions):
-        """events: key codes, or (x, y) clicks delivered before the next waitKey returns 255."""
+        """events: key codes, (x, y) presses, or (event, x, y) mouse events, each before waitKey returns 255."""
         mouse = {}
         pending = iter(events)
 
         def wait(_):
             event = next(pending)
             if isinstance(event, tuple):
-                mouse["callback"](home_ui.cv2.EVENT_LBUTTONUP, *event, 0, None)
+                if len(event) == 2:
+                    event = (home_ui.cv2.EVENT_LBUTTONDOWN, *event)
+                mouse["callback"](*event, 0, None)
                 return 255
             return event
 
@@ -104,6 +109,18 @@ class HomeLoopTests(unittest.TestCase):
         photos.assert_called_once()
         failing.assert_called_once()  # The error is shown in the window, the window stays open.
         self.assertGreaterEqual(status.call_count, 2)  # Refreshed after taking photos.
+
+    def test_press_counts_even_if_the_pointer_drifts_before_release(self):
+        cv2 = home_ui.cv2
+        buttons = home_ui.layout(False, True)
+        x, y = center(buttons, "check")
+        check = Mock(return_value=[])
+        # Seen on a touchpad: pressed inside the button, released a few pixels below it.
+        self.run_home([(cv2.EVENT_LBUTTONDOWN, x, y), (cv2.EVENT_LBUTTONUP, x, y + 30), 13], check_pictures=check)
+        check.assert_called_once()
+        # A release alone (the press was elsewhere) does nothing; hovering does nothing either.
+        self.run_home([(cv2.EVENT_MOUSEMOVE, x, y), (cv2.EVENT_LBUTTONUP, x, y), 13], check_pictures=check)
+        check.assert_called_once()
 
     def test_hair_buttons_only_for_dragon_ball(self):
         photos = Mock(return_value=[])

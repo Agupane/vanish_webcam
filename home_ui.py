@@ -135,10 +135,13 @@ def _text(image: np.ndarray, text: str, x: int, y: int, scale: float = 0.52,
     cv2.putText(image, ascii_text(text), (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
 
 
-def _button(image: np.ndarray, button: Button, selected: bool = False, fill=None) -> None:
+def _button(image: np.ndarray, button: Button, selected: bool = False, fill=None, hover: bool = False) -> None:
     x0, y0, x1, y1 = button.rect
-    cv2.rectangle(image, (x0, y0), (x1, y1), fill or (BOX_SELECTED if selected else BOX), -1, cv2.LINE_AA)
-    cv2.rectangle(image, (x0, y0), (x1, y1), ACCENT if selected else BORDER, 2, cv2.LINE_AA)
+    color = fill or (BOX_SELECTED if selected else BOX)
+    if hover:
+        color = tuple(min(255, channel + 28) for channel in color)
+    cv2.rectangle(image, (x0, y0), (x1, y1), color, -1, cv2.LINE_AA)
+    cv2.rectangle(image, (x0, y0), (x1, y1), ACCENT if selected or hover else BORDER, 2, cv2.LINE_AA)
     scale = 0.75 if button.name == "start" else 0.5
     thickness = 2 if button.name == "start" or selected else 1
     (width, height), _ = cv2.getTextSize(button.label, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
@@ -146,7 +149,7 @@ def _button(image: np.ndarray, button: Button, selected: bool = False, fill=None
 
 
 def render_home(settings: HomeSettings, buttons: list[Button], camera_count: int,
-                hair_status: str, messages: list[str]) -> np.ndarray:
+                hair_status: str, messages: list[str], hover: str | None = None) -> np.ndarray:
     image = np.empty((HEIGHT, WIDTH, 3), np.uint8)
     image[:] = BACKGROUND
     _text(image, "VanishCam", MARGIN, 52, 1.0, TEXT, 2)
@@ -156,7 +159,7 @@ def render_home(settings: HomeSettings, buttons: list[Button], camera_count: int
     _text(image, "EFFECT", MARGIN, EFFECT_TOP - 12, 0.46, HEADING)
     for button in buttons:
         if button.name.startswith("mode:"):
-            _button(image, button, button.name == f"mode:{settings.mode}")
+            _button(image, button, button.name == f"mode:{settings.mode}", hover=button.name == hover)
 
     _text(image, "CAMERA", MARGIN, CAMERA_TOP - 12, 0.46, HEADING)
     if camera_count == 0:
@@ -165,14 +168,14 @@ def render_home(settings: HomeSettings, buttons: list[Button], camera_count: int
         camera = settings.camera_label or f"Camera {settings.camera}"
     _text(image, camera[:48], MARGIN, CAMERA_TOP + 26, 0.6, TEXT)
     if "camera" in names:
-        _button(image, next(button for button in buttons if button.name == "camera"))
+        _button(image, next(button for button in buttons if button.name == "camera"), hover=hover == "camera")
 
     if "photos" in names:
         _text(image, "SUPER SAIYAN HAIR", MARGIN, HAIR_TOP, 0.46, HEADING)
         _text(image, hair_status, MARGIN, HAIR_TOP + 28, 0.55, TEXT)
         for button in buttons:
             if button.name in ("photos", "prompt", "folder", "check"):
-                _button(image, button)
+                _button(image, button, hover=button.name == hover)
 
     _text(image, "MESSAGES", MARGIN, MESSAGES_TOP, 0.46, HEADING)
     y = MESSAGES_TOP + 26
@@ -180,8 +183,29 @@ def render_home(settings: HomeSettings, buttons: list[Button], camera_count: int
         _text(image, line, MARGIN, y, 0.48, DIM)
         y += 22
 
-    _button(image, next(button for button in buttons if button.name == "start"), fill=START)
+    _button(image, next(button for button in buttons if button.name == "start"), fill=START, hover=hover == "start")
     return image
+
+
+def use_arrow_cursor(window: str) -> None:
+    """OpenCV's Windows windows show a crosshair, which makes buttons look unclickable. Best effort."""
+    if platform.system() != "Windows":
+        return
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        user32.FindWindowW.restype = ctypes.c_void_p
+        user32.GetWindow.restype = ctypes.c_void_p
+        user32.LoadCursorW.restype = ctypes.c_void_p
+        user32.SetClassLongPtrW.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p)
+        frame = user32.FindWindowW(None, window)
+        image = user32.GetWindow(ctypes.c_void_p(frame), 5) if frame else None  # GW_CHILD: the image area.
+        arrow = user32.LoadCursorW(None, ctypes.c_void_p(32512))  # IDC_ARROW
+        for handle in (frame, image):
+            if handle:
+                user32.SetClassLongPtrW(handle, -12, arrow)  # GCLP_HCURSOR
+    except Exception:
+        pass
 
 
 # ---------- loop ----------
@@ -198,11 +222,15 @@ def run_home(settings: HomeSettings, actions: HomeActions) -> HomeSettings | Non
     """Shows the home window until START (returns the settings) or Q/ESC/close (returns None)."""
     messages: deque[str] = deque(maxlen=MESSAGE_LINES)
     clicked: list[str | None] = [None]
+    hover: list[str | None] = [None]
     current: list[list[Button]] = [[]]
 
     def on_mouse(event, x, y, flags, userdata):
-        if event == cv2.EVENT_LBUTTONUP:
+        # Act on press: with a touchpad or touch screen the pointer often drifts off the button before release.
+        if event == cv2.EVENT_LBUTTONDOWN:
             clicked[0] = hit(current[0], x, y)
+        elif event == cv2.EVENT_MOUSEMOVE:
+            hover[0] = hit(current[0], x, y)
 
     def call(action, *args) -> None:
         try:
@@ -213,6 +241,7 @@ def run_home(settings: HomeSettings, actions: HomeActions) -> HomeSettings | Non
     cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
     cv2.setMouseCallback(WINDOW, on_mouse)
     status = None
+    shown = False
     try:
         while True:
             show_hair = settings.mode == "dragonball"
@@ -220,7 +249,10 @@ def run_home(settings: HomeSettings, actions: HomeActions) -> HomeSettings | Non
                 status = actions.hair_status()
             current[0] = layout(len(actions.cameras) > 1, show_hair)
             cv2.imshow(WINDOW, render_home(settings, current[0], len(actions.cameras), status or "",
-                                           list(messages)))
+                                           list(messages), hover[0]))
+            if not shown:
+                use_arrow_cursor(WINDOW)
+                shown = True
             key = cv2.waitKey(30) & 0xFF
             name, clicked[0] = clicked[0] or key_action(current[0], key), None
             if name == "quit":
