@@ -298,6 +298,27 @@ class SilhouetteTests(unittest.TestCase):
         # Over the chair, beside the head: lit by the aura only once the chair is out of the silhouette.
         self.assertGreater(int(with_head[100, 192, 2]) - int(without[100, 192, 2]), 30)
 
+    def test_raised_fists_are_never_covered_by_the_aura(self):
+        # The charge pose that powers down puts the fists above the eye line, beside the head.
+        frame, segmenter, head = chair_scene()
+        frame[60:140, 300:360] = (120, 150, 200)
+        segmenter[60:140, 300:360] = 1.0
+        hands = [normalized(fist(330, 85), 480, 270)]
+        levels = ssj.PowerLevels(aura=1.0)
+        covered = ssj.render_super_saiyan(frame, segmenter, levels, 0.5, ssj.AuraRenderer(), head)
+        shown = ssj.render_super_saiyan(frame, segmenter, levels, 0.5, ssj.AuraRenderer(), head, hands=hands)
+        self.assertTrue(np.any(covered[95, 330] != frame[95, 330]))
+        np.testing.assert_array_equal(shown[95, 330], frame[95, 330])
+
+    def test_hands_mask_follows_the_landmarks_and_the_segmenter(self):
+        segmenter = np.zeros((270, 480), np.float32)
+        segmenter[:, :340] = 1.0
+        mask = ssj.hands_mask([normalized(fist(330, 85), 480, 270)], segmenter)
+        self.assertGreater(mask[90, 330], 0.9)
+        self.assertEqual(mask[90, 345], 0.0)  # Outside the person.
+        self.assertEqual(mask[200, 100], 0.0)
+        self.assertIsNone(ssj.hands_mask([], segmenter))
+
 
 class PowerStateTests(unittest.TestCase):
     def test_full_timeline(self):

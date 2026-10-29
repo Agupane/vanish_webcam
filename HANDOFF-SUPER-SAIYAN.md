@@ -268,6 +268,12 @@ charge. Tune in `super_saiyan_effect.py` (`AURA_TONES`, `AURA_RADIUS`, `FLAME_RI
   into a boxy outline in the dark room. Fixed with `BODY_SLOPE`: below the eye line the allowed width grows from the
   head's at 3 px per px down, so the chair is cut along a shoulder-like slope. 142 tests. Next: owner approval of
   E1.8/E4.4/E6.5 on Windows, then Ubuntu.
+- 2026-10-29: owner (fair hair, green eyes) asked to switch off the eye/brow tint: `HomeSettings.eyes/brows`
+  checkboxes (`E`/`B`, saved in `vanishcam_settings.json`), `--no-ssj-eyes` / `--no-ssj-brows`,
+  `render_face(..., eyes, brows)`. Power-down with the two fists was hard because the aura painted over the raised
+  fists (above the eye line, outside the head ellipse; detection itself uses the clean camera frame): `hands_mask`
+  (hand landmark hulls, padded, intersected with the segmenter) joins the silhouette via the aura's `extra`.
+  147 tests. Owner also asked for animated hair that follows the head smoothly (plan being analyzed).
 
 ## 0. Start here
 

@@ -315,12 +315,15 @@ class HairOverlay:
 
 
 def render_face(frame: np.ndarray, face: np.ndarray | None, strength: float,
-                hair: HairOverlay | None = None) -> np.ndarray:
-    """Brows, eyes, then the hair on top (it may cover the brows, like a fringe)."""
+                hair: HairOverlay | None = None, eyes: bool = True, brows: bool = True) -> np.ndarray:
+    """Brows, eyes, then the hair on top (it may cover the brows, like a fringe).
+
+    `eyes` / `brows` off: for people who already have green eyes or fair eyebrows.
+    """
     if strength <= 0.0 or face is None:
         return frame
-    output = tint_brows(frame, face, strength)
-    output = tint_eyes(output, face, strength)
+    output = tint_brows(frame, face, strength) if brows else frame
+    output = tint_eyes(output, face, strength) if eyes else output
     if hair is not None:
         output = hair.render(output, face, strength)
     return output

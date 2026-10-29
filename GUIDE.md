@@ -71,7 +71,9 @@ A stray single-frame gesture no longer makes you vanish, and after each effect y
   golden hair, once it is in) counts as you, so a high-back chair behind your head is left out; below the eyes the
   person detector is trusted as is, so the aura never paints over your body. The first version used a GIF and
   golden-hair recolor; both were removed because they looked wrong.
-- **Eyes and eyebrows:** while transformed your irises turn teal and your eyebrows golden, using the face landmarks;
+- **Eyes and eyebrows:** each can be switched off in the home window (**Teal eyes**, **Golden eyebrows**, keys `E`
+  and `B`; remembered) or with `--no-ssj-eyes` / `--no-ssj-brows`. While transformed your irises turn teal and your
+  eyebrows golden, using the face landmarks;
   the whites of the eyes, the lids and the skin are left alone.
 - **Golden hair:** made once from your own photos (home window: **Take photos**, **Copy prompt**, an image tool of
   your choice, save the results as `ssj_hair/ssj_*.png` with **Open folder**, then **Check pictures**; or

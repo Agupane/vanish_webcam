@@ -357,6 +357,14 @@ def parse_args() -> argparse.Namespace:
         "--ssj-hair-photos", action="store_true",
         help="Take the photos for the Super Saiyan hair (saved in ssj_hair/, never uploaded) and print what to do next",
     )
+    parser.add_argument(
+        "--no-ssj-eyes", dest="ssj_eyes", action="store_false",
+        help="Super Saiyan: keep your own eye color (no teal irises)",
+    )
+    parser.add_argument(
+        "--no-ssj-brows", dest="ssj_brows", action="store_false",
+        help="Super Saiyan: keep your own eyebrows (no golden tint)",
+    )
     parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
@@ -1124,6 +1132,11 @@ def latest_faces(recognizer, timestamp_ms: int | None = None) -> list:
     return faces if isinstance(faces, list) else []
 
 
+def latest_hands(recognizer) -> list:
+    hands = getattr(recognizer, "last_hands", [])
+    return hands if isinstance(hands, list) else []
+
+
 def power_active(recognizer, timestamp_ms: int | None = None) -> bool:
     """Ki-charging pose in the detector's latest inference (the teleport wins)."""
     if getattr(recognizer, "last_teleport", False):
@@ -1443,6 +1456,9 @@ def initial_home_settings(args: argparse.Namespace, saved: dict,
     """Last effect and camera (by name); an explicit --camera wins."""
     mode = saved.get("mode") if saved.get("mode") in MODES else (args.mode or DEFAULT_MODE)
     settings = home_ui.HomeSettings(mode=mode)
+    # The command line can only switch them off; otherwise the last choice in the window is kept.
+    settings.eyes = bool(saved.get("eyes", True)) and getattr(args, "ssj_eyes", True)
+    settings.brows = bool(saved.get("brows", True)) and getattr(args, "ssj_brows", True)
     if args.camera is not None:
         settings.camera, settings.camera_label = args.camera, camera_label(args.camera)
     elif cameras:
@@ -1475,6 +1491,7 @@ def run() -> int:
         if chosen is None:
             return 0
         args.camera, mode = chosen.camera, chosen.mode
+        args.ssj_eyes, args.ssj_brows = chosen.eyes, chosen.brows
     else:
         mode = choose_mode() if getattr(args, "menu", False) else (args.mode or DEFAULT_MODE)
     if mode is None:
@@ -1856,7 +1873,9 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     head = ssj.head_ellipse(faces, width, height)
                     face = ssj_face.points_from_landmarks(faces[0], width, height) if faces else None
                     display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura, head,
-                                                      face, hair)
+                                                      face, hair, latest_hands(recognizer),
+                                                      getattr(args, "ssj_eyes", True),
+                                                      getattr(args, "ssj_brows", True))
 
             view_display = display
             if hud and state.phase == "calibrating":

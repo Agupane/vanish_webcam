@@ -137,6 +137,30 @@ def charging_from_landmarks(hands, faces, width: int, height: int) -> bool:
 
 # ---------- silhouette ----------
 
+HAND_PAD = 1.35  # Hand hull scaled around its centre: covers the fingertips and the edge of the palm.
+
+
+def hands_mask(hands, segmenter: np.ndarray) -> np.ndarray | None:
+    """The detected hands, where the segmenter sees the person: part of the silhouette even above the eyes.
+
+    Raised fists (the charge pose, to power down) are outside the head ellipse; without this the aura
+    painted over them and the user could not see their own hands.
+    """
+    height, width = segmenter.shape[:2]
+    mask = np.zeros((height, width), np.float32)
+    for hand in hands:
+        if len(hand) != 21:
+            continue
+        points = _points(hand, width, height)
+        if not np.isfinite(points).all():
+            continue
+        centre = points.mean(axis=0)
+        hull = cv2.convexHull(((points - centre) * HAND_PAD + centre).astype(np.int32))
+        cv2.fillConvexPoly(mask, hull, 1.0, cv2.LINE_AA)
+    if not mask.any():
+        return None
+    return np.minimum(mask, segmenter)
+
 def head_ellipse(faces, width: int, height: int):
     """Head and hair around the first face as ((cx, cy), (rx, ry), angle) in pixels, or None."""
     if not faces:
@@ -438,16 +462,21 @@ def shake_frame(frame: np.ndarray, amplitude: float, t: float) -> np.ndarray:
 
 def render_super_saiyan(frame: np.ndarray, mask: np.ndarray | None,
                         levels: PowerLevels, t: float, aura: AuraRenderer | None, head=None,
-                        face: np.ndarray | None = None, hair: ssj_face.HairOverlay | None = None) -> np.ndarray:
+                        face: np.ndarray | None = None, hair: ssj_face.HairOverlay | None = None,
+                        hands=(), eyes: bool = True, brows: bool = True) -> np.ndarray:
+    """`hands` are the latest hand landmarks (normalized), kept out of the aura."""
     output = frame
-    if aura is not None:
-        # Once the golden hair is in, the aura surrounds it too instead of being covered by the spikes.
-        extra = None
-        if hair is not None and face is not None and levels.hair >= 0.5:
-            extra = lambda: hair.mask(face, frame.shape)
+    if aura is not None and mask is not None:
+        def extra() -> np.ndarray | None:
+            # The golden hair (once it is in: the flames rise from the spikes) and the hands join the silhouette.
+            parts = [hands_mask(hands, mask)]
+            if hair is not None and face is not None and levels.hair >= 0.5:
+                parts.append(hair.mask(face, frame.shape))
+            parts = [part for part in parts if part is not None]
+            return np.maximum.reduce(parts) if parts else None
         output = aura.render(output, mask, levels.aura, t, levels.radius, head, extra)
     # Eyes, brows and the imported hair, on top of the aura (spikes may stick out of the silhouette).
-    output = ssj_face.render_face(output, face, levels.hair, hair)
+    output = ssj_face.render_face(output, face, levels.hair, hair, eyes, brows)
     if levels.flash > 0.0:
         output = np.clip(output.astype(np.float32) + (255.0 - output) * min(1.0, levels.flash),
                          0, 255).astype(np.uint8)

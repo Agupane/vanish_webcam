@@ -140,7 +140,9 @@ Hold **both clenched fists in front of your face, one on each side of the nose**
 rising flames and sparks surrounds your silhouette, the room gets darker and the edge of your body catches the light;
 your eyes turn teal, your eyebrows golden and, if you added it, your hair turns into golden spiky Super Saiyan hair
 (it flickers in during the charge, like in the series). The image shakes and a hum plays. Repeat the pose or press `S`
-to power down. Teleporting while transformed keeps the transformation.
+to power down (your fists stay visible: the aura never covers your hands). Teleporting while transformed keeps the
+transformation. If your eyes are already green or your eyebrows fair, switch off **Teal eyes** or **Golden eyebrows**
+in the home window (or start with `--no-ssj-eyes` / `--no-ssj-brows`).
 
 **Golden hair (optional, once):** VanishCam does not draw the hair itself: you make it from your own photos with an
 image tool you choose, and VanishCam never uploads anything.

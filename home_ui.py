@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import textwrap
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
@@ -22,7 +22,7 @@ import numpy as np
 
 WINDOW = "VanishCam"
 WIDTH = 720
-HEIGHT = 640
+HEIGHT = 690
 MARGIN = 30
 MODES = (("dragonball", "Dragon Ball"), ("normal", "Normal vanish"), ("naruto", "Naruto"))
 MESSAGE_LINES = 4
@@ -55,6 +55,8 @@ class HomeSettings:
     mode: str = "dragonball"
     camera: int | str | None = None
     camera_label: str = ""
+    eyes: bool = True  # Super Saiyan teal irises.
+    brows: bool = True  # Super Saiyan golden eyebrows.
 
 
 @dataclass
@@ -74,8 +76,8 @@ class HomeActions:
 EFFECT_TOP = 112
 CAMERA_TOP = 228
 HAIR_TOP = 318
-MESSAGES_TOP = 450
-START_TOP = 560
+MESSAGES_TOP = 500
+START_TOP = 610
 
 
 def layout(show_camera: bool, show_hair: bool) -> list[Button]:
@@ -100,6 +102,11 @@ def layout(show_camera: bool, show_hair: bool) -> list[Button]:
                 ("folder", "[O] Open folder", "o"), ("check", "[H] Check pictures", "h"))):
             x0 = MARGIN + index * (width + gap)
             buttons.append(Button(name, label, (x0, top, x0 + width, top + 44), key))
+        top += 56
+        width = (inner - gap) // 2
+        for index, (name, key) in enumerate((("eyes", "e"), ("brows", "b"))):
+            x0 = MARGIN + index * (width + gap)
+            buttons.append(Button(name, "", (x0, top, x0 + width, top + 38), key))
     buttons.append(Button("start", "START  (Enter)", (MARGIN, START_TOP, WIDTH - MARGIN, START_TOP + 56)))
     return buttons
 
@@ -148,6 +155,23 @@ def _button(image: np.ndarray, button: Button, selected: bool = False, fill=None
     _text(image, button.label, (x0 + x1 - width) // 2, (y0 + y1 + height) // 2, scale, TEXT, thickness)
 
 
+def _checkbox(image: np.ndarray, button: Button, checked: bool, hover: bool = False) -> None:
+    """A toggle drawn as a button with a tick box on the left; highlighted while on."""
+    x0, y0, x1, y1 = button.rect
+    fill = BOX_SELECTED if checked else BOX
+    if hover:
+        fill = tuple(min(255, channel + 28) for channel in fill)
+    cv2.rectangle(image, (x0, y0), (x1, y1), fill, -1, cv2.LINE_AA)
+    cv2.rectangle(image, (x0, y0), (x1, y1), ACCENT if checked or hover else BORDER, 2, cv2.LINE_AA)
+    side = (y1 - y0) - 18
+    bx, by = x0 + 12, y0 + 9
+    cv2.rectangle(image, (bx, by), (bx + side, by + side), TEXT, 2, cv2.LINE_AA)
+    if checked:
+        cv2.line(image, (bx + 4, by + side // 2), (bx + side // 2 - 1, by + side - 5), ACCENT, 3, cv2.LINE_AA)
+        cv2.line(image, (bx + side // 2 - 1, by + side - 5), (bx + side - 3, by + 4), ACCENT, 3, cv2.LINE_AA)
+    _text(image, f"{button.label}: {'on' if checked else 'off'}", bx + side + 14, (y0 + y1) // 2 + 6, 0.5, TEXT)
+
+
 def render_home(settings: HomeSettings, buttons: list[Button], camera_count: int,
                 hair_status: str, messages: list[str], hover: str | None = None, version: str = "") -> np.ndarray:
     image = np.empty((HEIGHT, WIDTH, 3), np.uint8)
@@ -175,11 +199,15 @@ def render_home(settings: HomeSettings, buttons: list[Button], camera_count: int
         _button(image, next(button for button in buttons if button.name == "camera"), hover=hover == "camera")
 
     if "photos" in names:
-        _text(image, "SUPER SAIYAN HAIR", MARGIN, HAIR_TOP, 0.46, HEADING)
+        _text(image, "SUPER SAIYAN", MARGIN, HAIR_TOP, 0.46, HEADING)
         _text(image, hair_status, MARGIN, HAIR_TOP + 28, 0.55, TEXT)
         for button in buttons:
             if button.name in ("photos", "prompt", "folder", "check"):
                 _button(image, button, hover=button.name == hover)
+            elif button.name in ("eyes", "brows"):
+                on = getattr(settings, button.name)
+                label = "[E] Teal eyes" if button.name == "eyes" else "[B] Golden eyebrows"
+                _checkbox(image, replace(button, label=label), on, hover=button.name == hover)
 
     _text(image, "MESSAGES", MARGIN, MESSAGES_TOP, 0.46, HEADING)
     y = MESSAGES_TOP + 26
@@ -274,6 +302,8 @@ def run_home(settings: HomeSettings, actions: HomeActions, version: str = "") ->
                 if choice is not None:
                     settings.camera, settings.camera_label = choice
                 cv2.setMouseCallback(WINDOW, on_mouse)
+            elif name in ("eyes", "brows"):
+                setattr(settings, name, not getattr(settings, name))
             elif name == "photos":
                 call(actions.take_photos, settings)
                 status = None
@@ -304,8 +334,9 @@ def load_settings(path: Path) -> dict:
 def save_settings(path: Path, settings: HomeSettings) -> None:
     """The camera is remembered by name: indices change when webcams are plugged in or out."""
     try:
-        path.write_text(json.dumps({"mode": settings.mode, "camera": settings.camera_label}, indent=2) + "\n",
-                        encoding="utf-8")
+        data = {"mode": settings.mode, "camera": settings.camera_label, "eyes": settings.eyes,
+                "brows": settings.brows}
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     except OSError:
         pass
 

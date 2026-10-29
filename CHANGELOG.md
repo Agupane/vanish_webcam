@@ -7,6 +7,11 @@ All notable changes to this fork are documented here. The format is based on
 
 ### Changed
 
+- Super Saiyan: the detected hands join the silhouette, so the aura no longer covers the raised fists of the
+  power-down pose. Teal eyes and golden eyebrows can be switched off (home window checkboxes, remembered, or
+  `--no-ssj-eyes` / `--no-ssj-brows`) for people who already have green eyes or fair eyebrows. The home window, the
+  side panel and the terminal show the version (git commit and date).
+
 - Super Saiyan silhouette after real-call tests (owner, Windows, Meet): above the eyes only the head counts as the
   person, so a high-back chair behind the head is left out; below the eyes the segmenter mask is kept as it is. The
   previous cut by color difference with the background photo failed in a dark room and with a swivel chair, and made

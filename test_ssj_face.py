@@ -101,6 +101,16 @@ class EyesAndBrowsTests(unittest.TestCase):
         self.assertIs(ssj_face.render_face(self.frame, None, 1.0), self.frame)
         self.assertIs(ssj_face.tint_eyes(self.frame, np.zeros((10, 2), np.float32), 1.0), self.frame)
 
+    def test_eyes_and_brows_can_be_switched_off(self):
+        # For people who already have green eyes or fair eyebrows.
+        both = ssj_face.render_face(self.frame, self.face, 1.0)
+        no_eyes = ssj_face.render_face(self.frame, self.face, 1.0, eyes=False)
+        no_brows = ssj_face.render_face(self.frame, self.face, 1.0, brows=False)
+        np.testing.assert_array_equal(no_eyes, ssj_face.tint_brows(self.frame, self.face, 1.0))
+        np.testing.assert_array_equal(no_brows, ssj_face.tint_eyes(self.frame, self.face, 1.0))
+        self.assertTrue(np.any(both != no_eyes) and np.any(both != no_brows))
+        self.assertIs(ssj_face.render_face(self.frame, self.face, 1.0, eyes=False, brows=False), self.frame)
+
 
 class HairImportTests(unittest.TestCase):
     def test_extracts_the_golden_hair_only(self):

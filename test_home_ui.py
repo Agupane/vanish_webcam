@@ -122,6 +122,13 @@ class HomeLoopTests(unittest.TestCase):
         self.run_home([(cv2.EVENT_MOUSEMOVE, x, y), (cv2.EVENT_LBUTTONUP, x, y), 13], check_pictures=check)
         check.assert_called_once()
 
+    def test_eyes_and_brows_toggle_with_keys_and_mouse(self):
+        buttons = home_ui.layout(False, True)
+        result = self.run_home([ord("e"), center(buttons, "brows"), 13])
+        self.assertEqual((result.eyes, result.brows), (False, False))
+        result = self.run_home([ord("e"), ord("e"), 13])
+        self.assertTrue(result.eyes)
+
     def test_hair_buttons_only_for_dragon_ball(self):
         photos = Mock(return_value=[])
         result = self.run_home([ord("2"), ord("t"), 13], take_photos=photos)
@@ -135,7 +142,8 @@ class SettingsTests(unittest.TestCase):
             path = Path(folder) / "settings.json"
             self.assertEqual(home_ui.load_settings(path), {})
             home_ui.save_settings(path, home_ui.HomeSettings("naruto", 2, "Logitech C920"))
-            self.assertEqual(home_ui.load_settings(path), {"mode": "naruto", "camera": "Logitech C920"})
+            self.assertEqual(home_ui.load_settings(path),
+                             {"mode": "naruto", "camera": "Logitech C920", "eyes": True, "brows": True})
             path.write_text("[1, 2")
             self.assertEqual(home_ui.load_settings(path), {})
             path.write_text(json.dumps([1, 2]))
@@ -155,6 +163,14 @@ class SettingsTests(unittest.TestCase):
         with patch.object(app, "camera_label", return_value="USB"):
             settings = app.initial_home_settings(args, {"camera": "Logitech C920"}, [(2, "Logitech C920")])
         self.assertEqual((settings.mode, settings.camera, settings.camera_label), ("normal", 5, "USB"))
+
+    def test_eyes_and_brows_remembered_and_switched_off_from_the_command_line(self):
+        args = argparse.Namespace(camera=None, mode="dragonball", ssj_eyes=True, ssj_brows=True)
+        settings = app.initial_home_settings(args, {"eyes": False}, [])
+        self.assertEqual((settings.eyes, settings.brows), (False, True))
+        args.ssj_brows = False
+        settings = app.initial_home_settings(args, {}, [])
+        self.assertEqual((settings.eyes, settings.brows), (True, False))
 
 
 class VersionTests(unittest.TestCase):
