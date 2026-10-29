@@ -157,6 +157,31 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual((settings.mode, settings.camera, settings.camera_label), ("normal", 5, "USB"))
 
 
+class VersionTests(unittest.TestCase):
+    def test_version_comes_from_git_or_is_unknown(self):
+        app.app_version.cache_clear()
+        try:
+            with patch.object(app.subprocess, "run", side_effect=[Mock(stdout="cb01479 (2026-10-29)\n"),
+                                                                    Mock(stdout="")]):
+                self.assertEqual(app.app_version(), "cb01479 (2026-10-29)")
+            app.app_version.cache_clear()
+            with patch.object(app.subprocess, "run", side_effect=[Mock(stdout="cb01479 (2026-10-29)\n"),
+                                                                    Mock(stdout=" M vanish_cam.py\n")]):
+                self.assertEqual(app.app_version(), "cb01479 (2026-10-29) +changes")
+            app.app_version.cache_clear()
+            with patch.object(app.subprocess, "run", side_effect=FileNotFoundError("git")):
+                self.assertEqual(app.app_version(), "unknown")
+        finally:
+            app.app_version.cache_clear()
+
+    def test_version_is_drawn_in_the_home_window(self):
+        settings = home_ui.HomeSettings()
+        buttons = home_ui.layout(False, True)
+        plain = home_ui.render_home(settings, buttons, 1, "", [])
+        versioned = home_ui.render_home(settings, buttons, 1, "", [], version="cb01479 (2026-10-29)")
+        self.assertTrue(np.any(plain[30:60, 400:] != versioned[30:60, 400:]))
+
+
 class OsHelperTests(unittest.TestCase):
     def test_copy_uses_the_first_available_linux_tool(self):
         with patch.object(home_ui.shutil, "which", side_effect=lambda name: name == "xclip" and "/usr/bin/xclip"), \

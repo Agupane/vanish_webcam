@@ -149,10 +149,14 @@ def _button(image: np.ndarray, button: Button, selected: bool = False, fill=None
 
 
 def render_home(settings: HomeSettings, buttons: list[Button], camera_count: int,
-                hair_status: str, messages: list[str], hover: str | None = None) -> np.ndarray:
+                hair_status: str, messages: list[str], hover: str | None = None, version: str = "") -> np.ndarray:
     image = np.empty((HEIGHT, WIDTH, 3), np.uint8)
     image[:] = BACKGROUND
     _text(image, "VanishCam", MARGIN, 52, 1.0, TEXT, 2)
+    if version:
+        label = f"Version {version}"
+        (width, _), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+        _text(image, label, WIDTH - MARGIN - width, 52, 0.45, DIM)
     _text(image, "Set everything up here, then press START.", MARGIN, 80, 0.5, DIM)
     names = {button.name for button in buttons}
 
@@ -218,7 +222,7 @@ def _wrapped(lines: list[str]) -> list[str]:
     return result
 
 
-def run_home(settings: HomeSettings, actions: HomeActions) -> HomeSettings | None:
+def run_home(settings: HomeSettings, actions: HomeActions, version: str = "") -> HomeSettings | None:
     """Shows the home window until START (returns the settings) or Q/ESC/close (returns None)."""
     messages: deque[str] = deque(maxlen=MESSAGE_LINES)
     clicked: list[str | None] = [None]
@@ -249,7 +253,7 @@ def run_home(settings: HomeSettings, actions: HomeActions) -> HomeSettings | Non
                 status = actions.hair_status()
             current[0] = layout(len(actions.cameras) > 1, show_hair)
             cv2.imshow(WINDOW, render_home(settings, current[0], len(actions.cameras), status or "",
-                                           list(messages), hover[0]))
+                                           list(messages), hover[0], version))
             if not shown:
                 use_arrow_cursor(WINDOW)
                 shown = True

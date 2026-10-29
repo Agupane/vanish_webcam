@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import os
 import platform
+import subprocess
 import sys
 import textwrap
 import time
@@ -13,6 +14,7 @@ import urllib.error
 import urllib.request
 from collections import deque
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from contextlib import ExitStack
 from pathlib import Path
 
@@ -148,6 +150,21 @@ class GestureHold:
         self.since = None
         self.last_seen = None
         self.armed = True
+
+
+@lru_cache(maxsize=1)
+def app_version() -> str:
+    """The commit this copy runs from, shown in the windows so the user can tell an update arrived."""
+    def git(*args: str) -> str:
+        return subprocess.run(["git", "-C", str(APP_DIR), *args], capture_output=True, text=True,
+                              timeout=3, check=True).stdout.strip()
+    try:
+        version = git("log", "-1", "--format=%h (%cs)")
+        if git("status", "--porcelain", "--untracked-files=no"):
+            version += " +changes"
+        return version or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"  # Installed from a zip (no git history) or git missing.
 
 
 def positive_fps(value: str) -> float:
@@ -1146,7 +1163,7 @@ def _panel_line(panel: np.ndarray, text: str, x: int, y: int,
 
 
 def render_status_panel(width: int, height: int, mode: str, phase: str, camera: str,
-                        action: str, lines: list[str]) -> np.ndarray:
+                        action: str, lines: list[str], version: str = "") -> np.ndarray:
     """Side panel with the current step, keys and the recent messages."""
     phase_label, accent = PHASE_STYLES.get(phase, ("READY", (110, 220, 120)))
     panel = np.empty((height, width, 3), np.uint8)
@@ -1157,6 +1174,8 @@ def render_status_panel(width: int, height: int, mode: str, phase: str, camera: 
     y = _panel_line(panel, "VanishCam", x, y, 0.82, (240, 244, 247), 2)
     y = _panel_line(panel, f"Mode: {MODE_LABELS.get(mode, mode)}", x, y, 0.5, (150, 165, 175))
     y = _panel_line(panel, f"Camera: {camera}", x, y, 0.5, (150, 165, 175))
+    if version:
+        y = _panel_line(panel, f"Version: {version}", x, y, 0.5, (150, 165, 175))
     y += 8
     y = _panel_line(panel, phase_label, x, y, 0.7, accent, 2)
     y += 10
@@ -1339,7 +1358,8 @@ def take_hair_photos(camera: int | str | None, width: int, height: int, mirrored
                     raise RuntimeError("The webcam stopped sending frames.")
                 if mirrored:
                     frame = cv2.flip(frame, 1)  # Same orientation as the live detection.
-                panel = render_status_panel(PANEL_WIDTH, frame.shape[0], "dragonball", "ready", "photo", action, [])
+                panel = render_status_panel(PANEL_WIDTH, frame.shape[0], "dragonball", "ready", "photo", action, [],
+                                            app_version())
                 cv2.imshow(WINDOW_NAME, compose_dashboard(frame, panel))
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):
@@ -1434,7 +1454,7 @@ def initial_home_settings(args: argparse.Namespace, saved: dict,
 def run_home(args: argparse.Namespace) -> home_ui.HomeSettings | None:
     cameras = find_cameras()
     settings = initial_home_settings(args, home_ui.load_settings(SETTINGS_PATH), cameras)
-    chosen = home_ui.run_home(settings, home_actions(args, cameras))
+    chosen = home_ui.run_home(settings, home_actions(args, cameras), app_version())
     if chosen is not None:
         home_ui.save_settings(SETTINGS_PATH, chosen)
     return chosen
@@ -1442,6 +1462,7 @@ def run_home(args: argparse.Namespace) -> home_ui.HomeSettings | None:
 
 def run() -> int:
     args = parse_args()
+    print(f"[VanishCam] Version {app_version()}")
     if getattr(args, "list_cameras", False):
         list_cameras()
         return 0
@@ -1615,7 +1636,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         panel = panel_cache.get(key)
         if panel is None:
             panel = render_status_panel(
-                PANEL_WIDTH, height, mode, phase_key, camera_name, action, list(lines)
+                PANEL_WIDTH, height, mode, phase_key, camera_name, action, list(lines), app_version()
             )
             if len(panel_cache) >= 6:
                 panel_cache.clear()
