@@ -323,12 +323,13 @@ class WindowsCameraTests(unittest.TestCase):
 class LivePanelTests(unittest.TestCase):
     def test_buttons_sit_at_the_bottom_and_are_hit_where_drawn(self):
         controls = app.panel_controls(True, True, False)
-        self.assertEqual([name for name, _, _ in controls], ["recalibrate", "eyes", "brows", "hair"])
+        self.assertEqual([name for name, _, _ in controls], ["recalibrate", "flames", "eyes", "brows", "hair"])
         rects = app.panel_buttons(380, 540, len(controls))
         self.assertEqual(rects[-1][3], 540 - 12)
-        self.assertEqual(rects[1][1], rects[2][1])  # The switches share the bottom row.
-        self.assertEqual(rects[1][1], rects[3][1])
-        self.assertLess(rects[0][3], rects[1][1])  # Recalibrate above them.
+        self.assertEqual(rects[0][1], rects[1][1])  # Recalibrate and the flame aura on the top row.
+        self.assertEqual({rect[1] for rect in rects[2:]}, {rects[2][1]})  # Eyes, brows, hair on the bottom row.
+        self.assertLess(rects[0][3], rects[2][1])
+        self.assertEqual(app.panel_buttons(380, 540, 1), [(12, 540 - 12 - app.PANEL_BUTTON_HEIGHT, 368, 528)])
         for (name, _, _), (x0, y0, x1, y1) in zip(controls, rects):
             self.assertTrue(12 <= x0 < x1 <= 380 - 12)
             self.assertEqual(app.panel_hit(380, 540, controls, (x0 + x1) // 2, (y0 + y1) // 2), name)
@@ -339,11 +340,11 @@ class LivePanelTests(unittest.TestCase):
         on = app.render_status_panel(380, 540, "dragonball", "super", "0", "x", [], "", app.panel_controls(True, True, True))
         off = app.render_status_panel(380, 540, "dragonball", "super", "0", "x", [], "", app.panel_controls(True, False, True))
         self.assertEqual(on.shape, (540, 380, 3))
-        x0, y0, x1, y1 = app.panel_buttons(380, 540, 4)[1]
+        x0, y0, x1, y1 = app.panel_buttons(380, 540, 5)[2]
         self.assertTrue(np.any(on[y0:y1, x0:x1] != off[y0:y1, x0:x1]))
         hairless = app.render_status_panel(380, 540, "dragonball", "super", "0", "x", [], "",
                                            app.panel_controls(True, True, True, False))
-        x0, y0, x1, y1 = app.panel_buttons(380, 540, 4)[3]
+        x0, y0, x1, y1 = app.panel_buttons(380, 540, 5)[4]
         self.assertTrue(np.any(on[y0:y1, x0:x1] != hairless[y0:y1, x0:x1]))
 
 

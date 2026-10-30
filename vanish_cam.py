@@ -381,6 +381,10 @@ def parse_args() -> argparse.Namespace:
         help="Super Saiyan: keep your own hair (no imported golden hair; aura only)",
     )
     parser.add_argument(
+        "--aura-style", choices=ssj.AURA_STYLES, default=None,
+        help="Super Saiyan aura: classic (default) or contour (flame tongues that follow your outline)",
+    )
+    parser.add_argument(
         "--capture-thread", action=argparse.BooleanOptionalAction, default=True,
         help="Read the webcam in a thread and always use its newest frame (default: on)",
     )
@@ -1220,13 +1224,13 @@ PANEL_BUTTON_HEIGHT = 34
 PANEL_BUTTON_GAP = 8
 
 
-def panel_controls(super_saiyan: bool, eyes: bool, brows: bool,
-                   hair: bool = True) -> list[tuple[str, str, bool | None]]:
+def panel_controls(super_saiyan: bool, eyes: bool, brows: bool, hair: bool = True,
+                   flames: bool = False) -> list[tuple[str, str, bool | None]]:
     """Clickable buttons of the side panel: (name, label, toggle state or None for a plain button)."""
-    controls: list[tuple[str, str, bool | None]] = [("recalibrate", "Recalibrate background (SPACE)", None)]
-    if super_saiyan:
-        controls += [("eyes", "Eyes (E)", eyes), ("brows", "Brows (B)", brows), ("hair", "Hair (G)", hair)]
-    return controls
+    if not super_saiyan:
+        return [("recalibrate", "Recalibrate background (SPACE)", None)]
+    return [("recalibrate", "Recalibrate (SPACE)", None), ("flames", "Flame aura (A)", flames),
+            ("eyes", "Eyes (E)", eyes), ("brows", "Brows (B)", brows), ("hair", "Hair (G)", hair)]
 
 
 # Super Saiyan switches: setting name, args attribute, label for the log.
@@ -1238,20 +1242,21 @@ FACE_SWITCHES = {
 
 
 def panel_buttons(width: int, height: int, count: int) -> list[tuple[int, int, int, int]]:
-    """Rectangles (x0, y0, x1, y1) of the panel buttons at the bottom of the panel: the first one on its own row,
-    the switches side by side on the row below (keeps room for the log)."""
+    """Rectangles (x0, y0, x1, y1) of the panel buttons at the bottom of the panel, in two rows (keeps room for the
+    log): the last switches (up to 3) side by side on the bottom row, the others sharing the row above."""
     if count <= 0:
         return []
-    bottom = height - 12
-    rects = []
-    if count > 1:
-        top = bottom - PANEL_BUTTON_HEIGHT
-        span = (width - 24 - PANEL_BUTTON_GAP * (count - 2)) / (count - 1)
-        for index in range(count - 1):
-            x0 = int(round(12 + index * (span + PANEL_BUTTON_GAP)))
-            rects.append((x0, top, int(round(x0 + span)), bottom))
-        bottom = top - PANEL_BUTTON_GAP
-    return [(12, bottom - PANEL_BUTTON_HEIGHT, width - 12, bottom)] + rects
+
+    def row(items: int, top: int) -> list[tuple[int, int, int, int]]:
+        span = (width - 24 - PANEL_BUTTON_GAP * (items - 1)) / items
+        return [(int(round(12 + index * (span + PANEL_BUTTON_GAP))), top,
+                 int(round(12 + index * (span + PANEL_BUTTON_GAP) + span)), top + PANEL_BUTTON_HEIGHT)
+                for index in range(items)]
+
+    bottom_items = min(3, count - 1)
+    lower = height - 12 - PANEL_BUTTON_HEIGHT
+    upper = lower - PANEL_BUTTON_GAP - PANEL_BUTTON_HEIGHT if bottom_items else lower
+    return row(count - bottom_items, upper) + (row(bottom_items, lower) if bottom_items else [])
 
 
 def panel_hit(width: int, height: int, controls, x: int, y: int) -> str | None:
@@ -1285,7 +1290,7 @@ def render_status_panel(width: int, height: int, mode: str, phase: str, camera: 
     y = _panel_line(panel, "KEYS", x, y, 0.46, (120, 135, 145))
     for line in ("V vanish   R reappear   S Super Saiyan",
                  "P pause   SPACE background   F fullscreen",
-                 "E eyes  B brows  G hair   Q quit"):
+                 "E eyes  B brows  G hair  A flames  Q quit"):
         y = _panel_line(panel, line, x, y, 0.48, (185, 195, 202))
     rects = panel_buttons(width, height, len(controls))
     bottom = (rects[0][1] - 10) if rects else height - 12
@@ -1554,6 +1559,8 @@ def initial_home_settings(args: argparse.Namespace, saved: dict,
     settings.eyes = bool(saved.get("eyes", True)) and getattr(args, "ssj_eyes", True)
     settings.brows = bool(saved.get("brows", True)) and getattr(args, "ssj_brows", True)
     settings.hair = bool(saved.get("hair", True)) and getattr(args, "ssj_hair", True)
+    style = getattr(args, "aura_style", None)
+    settings.flames = style == "contour" if style else bool(saved.get("flames", False))
     if args.camera is not None:
         settings.camera, settings.camera_label = args.camera, camera_label(args.camera)
     elif cameras:
@@ -1587,6 +1594,7 @@ def run() -> int:
             return 0
         args.camera, mode = chosen.camera, chosen.mode
         args.ssj_eyes, args.ssj_brows, args.ssj_hair = chosen.eyes, chosen.brows, chosen.hair
+        args.aura_style = "contour" if chosen.flames else "classic"
     else:
         mode = choose_mode() if getattr(args, "menu", False) else (args.mode or DEFAULT_MODE)
     if mode is None:
@@ -1634,7 +1642,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     super_saiyan = mode == "dragonball"
     power = ssj.PowerState()
     power_hold = GestureHold(ssj.CHARGE_SECONDS)
-    aura = ssj.AuraRenderer() if super_saiyan else None
+    aura = ssj.AuraRenderer(style=getattr(args, "aura_style", None) or "classic") if super_saiyan else None
     # The face arrives ~12.5 times a second: the tracker gives one per frame, the dynamics make the hair move.
     head_tracker = ssj_face.head_tracker()
     hair_dynamics = ssj_motion.HairDynamics()
@@ -1695,7 +1703,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
             "Repeat (or press S) to go back to normal.")
         hair = load_hair(log)
     log("[Webcam] Keys in the window: V vanish, R reappear/restart setup, S Super Saiyan "
-        "(E eyes, B brows, G hair), "
+        "(E eyes, B brows, G hair, A flame aura), "
         "SPACE background, P pause, F fullscreen, Q quit.")
 
     def transform(now: float) -> None:
@@ -1768,7 +1776,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
 
     def controls() -> list:
         return panel_controls(super_saiyan, getattr(args, "ssj_eyes", True), getattr(args, "ssj_brows", True),
-                              getattr(args, "ssj_hair", True))
+                              getattr(args, "ssj_hair", True), aura is not None and aura.style == "contour")
 
     clicked: list[str | None] = [None]
     panel_origin = [0, 0]  # Where the panel starts in the window (the video width) and its height.
@@ -2076,8 +2084,17 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 button = "brows"
             elif key in (ord("g"), ord("G")):
                 button = "hair"
+            elif key in (ord("a"), ord("A")):
+                button = "flames"
             if button in FACE_SWITCHES and super_saiyan:
                 toggle_face(button)
+            elif button == "flames" and aura is not None:
+                # A new renderer builds its own geometry on the next frame.
+                flames = aura.style != "contour"
+                args.aura_style = "contour" if flames else "classic"
+                aura = ssj.AuraRenderer(style=args.aura_style)
+                home_ui.update_settings(SETTINGS_PATH, flames=flames)
+                log(f"[Super Saiyan] Flame aura {'on' if flames else 'off'}.")
             if key in (ord("q"), 27):
                 break
             if key in (ord("p"), ord("P")):

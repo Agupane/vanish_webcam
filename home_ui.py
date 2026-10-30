@@ -58,6 +58,7 @@ class HomeSettings:
     eyes: bool = True  # Super Saiyan teal irises.
     brows: bool = True  # Super Saiyan golden eyebrows.
     hair: bool = True  # Super Saiyan imported golden hair (off: aura only, the user's own hair).
+    flames: bool = False  # Super Saiyan aura style: flame tongues that follow the outline ("contour").
 
 
 @dataclass
@@ -80,8 +81,8 @@ HAIR_TOP = 318
 MESSAGES_TOP = 500
 START_TOP = 610
 # Super Saiyan switches: (setting, key) and their labels.
-SWITCHES = (("eyes", "e"), ("brows", "b"), ("hair", "g"))
-SWITCH_LABELS = {"eyes": "[E] Teal eyes", "brows": "[B] Gold brows", "hair": "[G] Gold hair"}
+SWITCHES = (("eyes", "e"), ("brows", "b"), ("hair", "g"), ("flames", "a"))
+SWITCH_LABELS = {"eyes": "[E] Eyes", "brows": "[B] Brows", "hair": "[G] Hair", "flames": "[A] Flames"}
 
 
 def layout(show_camera: bool, show_hair: bool) -> list[Button]:
@@ -107,7 +108,7 @@ def layout(show_camera: bool, show_hair: bool) -> list[Button]:
             x0 = MARGIN + index * (width + gap)
             buttons.append(Button(name, label, (x0, top, x0 + width, top + 44), key))
         top += 56
-        width = (inner - 2 * gap) // 3
+        width = (inner - 3 * gap) // 4
         for index, (name, key) in enumerate(SWITCHES):
             x0 = MARGIN + index * (width + gap)
             buttons.append(Button(name, "", (x0, top, x0 + width, top + 38), key))
@@ -338,14 +339,15 @@ def save_settings(path: Path, settings: HomeSettings) -> None:
     """The camera is remembered by name: indices change when webcams are plugged in or out."""
     try:
         data = {"mode": settings.mode, "camera": settings.camera_label, "eyes": settings.eyes,
-                "brows": settings.brows, "hair": settings.hair}
+                "brows": settings.brows, "hair": settings.hair,
+                "flames": settings.flames}
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     except OSError:
         pass
 
 
 def update_settings(path: Path, **values) -> None:
-    """Change some saved settings (the live window's eye/brow/hair switches), keeping the others."""
+    """Change some saved settings (the live window's switches), keeping the others."""
     data = load_settings(path)
     data.update(values)
     try:

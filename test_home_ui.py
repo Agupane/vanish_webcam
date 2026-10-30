@@ -136,6 +136,12 @@ class HomeLoopTests(unittest.TestCase):
         result = self.run_home([center(buttons, "hair"), center(buttons, "hair"), 13])
         self.assertTrue(result.hair)
 
+    def test_flame_aura_switch(self):
+        buttons = home_ui.layout(False, True)
+        self.assertFalse(self.run_home([13]).flames)  # Off by default: the classic aura.
+        self.assertTrue(self.run_home([ord("a"), 13]).flames)
+        self.assertTrue(self.run_home([center(buttons, "flames"), 13]).flames)
+
     def test_switches_fit_inside_the_window(self):
         for button in home_ui.layout(True, True):
             if button.name == "start":
@@ -158,7 +164,7 @@ class SettingsTests(unittest.TestCase):
             home_ui.save_settings(path, home_ui.HomeSettings("naruto", 2, "Logitech C920"))
             self.assertEqual(home_ui.load_settings(path),
                              {"mode": "naruto", "camera": "Logitech C920", "eyes": True, "brows": True,
-                              "hair": True})
+                              "hair": True, "flames": False})
             path.write_text("[1, 2")
             self.assertEqual(home_ui.load_settings(path), {})
             path.write_text(json.dumps([1, 2]))
@@ -193,6 +199,15 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(app.initial_home_settings(args, {}, []).hair)
         args.ssj_hair = False
         self.assertFalse(app.initial_home_settings(args, {"hair": True}, []).hair)
+
+    def test_flames_remembered_and_set_from_the_command_line(self):
+        args = argparse.Namespace(camera=None, mode="dragonball", aura_style=None)
+        self.assertFalse(app.initial_home_settings(args, {}, []).flames)
+        self.assertTrue(app.initial_home_settings(args, {"flames": True}, []).flames)
+        args.aura_style = "classic"
+        self.assertFalse(app.initial_home_settings(args, {"flames": True}, []).flames)
+        args.aura_style = "contour"
+        self.assertTrue(app.initial_home_settings(args, {}, []).flames)
 
 
 class VersionTests(unittest.TestCase):

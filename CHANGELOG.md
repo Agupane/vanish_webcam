@@ -14,6 +14,9 @@ All notable changes to this fork are documented here. The format is based on
 
 ### Changed
 
+- Super Saiyan flame aura (`contour` style, off by default): **Flames** checkbox in the home window, **Flame aura**
+  button in the side panel, key `A`, or `--aura-style contour`; remembered like the other switches.
+
 - Super Saiyan: the imported golden hair can be switched off too, leaving only the aura (and the eyes/brows if on):
   **Gold hair** checkbox in the home window and the side panel, key `G`, or `--no-ssj-hair`; remembered like the
   eyes and brows. The side panel shows the three switches on one row (Eyes / Brows / Hair).

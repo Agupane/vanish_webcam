@@ -584,6 +584,21 @@ class SuperSaiyanLoopTests(unittest.TestCase):
         self.assertIs(passed[0], hair)  # Before G: the imported hair.
         self.assertIsNone(passed[-1])  # After G: aura only.
 
+    def test_key_a_switches_the_flame_aura_live_and_remembers_it(self):
+        styles = []
+        real = app.ssj.AuraRenderer
+
+        def renderer(*args, **kwargs):
+            styles.append(kwargs.get("style"))
+            return real(*args, **kwargs)
+        with patch.object(app.home_ui, "update_settings") as saved, patch.object(app.ssj, "AuraRenderer", renderer):
+            frames, shown, _, _, printed = run_loop(mode="dragonball", keys={50: ord("s"), 60: ord("a"), 70: ord("a")},
+                                                    mask=person_in_middle(), seconds=8.0)
+        self.assertEqual(styles, ["classic", "contour", "classic"])
+        self.assertEqual([call.kwargs for call in saved.call_args_list], [{"flames": True}, {"flames": False}])
+        self.assertTrue(any("Flame aura on" in line for line in printed))
+        self.assertTrue(np.any(shown[65] != frames[65]))  # Still transformed with the other style.
+
     def test_teleport_while_transformed_cuts_and_resumes_the_hum(self):
         teleport = lambda t: 6.0 <= t < 7.3 or 8.5 <= t < 9.8
         frames, shown, _, sound, _ = run_loop(
