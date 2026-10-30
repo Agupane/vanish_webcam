@@ -5,6 +5,13 @@ All notable changes to this fork are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- Experimental Super Saiyan aura style "contour flames" (`AuraRenderer(style="contour")`, off by default): pointed
+  cel-shaded flame tongues from a procedural strip that wraps around the whole outline (arc length along the
+  silhouette, distance away from it), lean upward, grow taller above the head and flicker. The classic aura stays the
+  default and is unchanged. Preview with `tools/aura_preview.py --style contour`.
+
 ### Changed
 
 - Live controls in the side panel: **Recalibrate background** and the **Teal eyes** / **Gold brows** switches

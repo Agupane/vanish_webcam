@@ -6,6 +6,7 @@ body must never be cut: no aura painted on it).
 
     .venv/bin/python tools/aura_preview.py aura.png          # write the grid
     .venv/bin/python tools/aura_preview.py --show            # open a window instead
+    .venv/bin/python tools/aura_preview.py --style contour contour.png   # flames mapped along the outline
 """
 
 from __future__ import annotations
@@ -43,15 +44,16 @@ def scene(wall, shoulders: int = 340, height: int = 540, width: int = 960):
     return frame, mask, head
 
 
-def grid(times=(0.0, 0.37)) -> np.ndarray:
+def grid(times=(0.0, 0.37), style: str = "classic") -> np.ndarray:
     rows = []
     for wall in (LIGHT_WALL, DARK_WALL):
         frame, mask, head = scene(wall)
-        aura = ssj.AuraRenderer()
+        aura = ssj.AuraRenderer(style=style)
         levels = ssj.PowerLevels(aura=1.0)
         cells = [ssj.render_super_saiyan(frame, mask, levels, t, aura, head) for t in times]
         close_frame, close_mask, _ = scene(wall, shoulders=280)
-        cells.append(ssj.render_super_saiyan(close_frame, close_mask, levels, times[0], ssj.AuraRenderer(), head))
+        cells.append(ssj.render_super_saiyan(close_frame, close_mask, levels, times[0],
+                                             ssj.AuraRenderer(style=style), head))
         rows.append(np.hstack(cells))
     return np.vstack(rows)
 
@@ -61,8 +63,9 @@ def main() -> int:
     parser.add_argument("output", nargs="?", help="PNG to write")
     parser.add_argument("--show", action="store_true", help="open a window instead of writing a file")
     parser.add_argument("--scale", type=float, default=0.6, help="output scale (default: 0.6)")
+    parser.add_argument("--style", choices=ssj.AURA_STYLES, default="classic", help="aura style (default: classic)")
     args = parser.parse_args()
-    image = cv2.resize(grid(), None, fx=args.scale, fy=args.scale, interpolation=cv2.INTER_AREA)
+    image = cv2.resize(grid(style=args.style), None, fx=args.scale, fy=args.scale, interpolation=cv2.INTER_AREA)
     if args.show or not args.output:
         cv2.imshow("Aura preview", image)
         cv2.waitKey(0)

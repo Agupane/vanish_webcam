@@ -45,6 +45,19 @@ AURA_TONES = ((0.22, (0, 190, 255), 0.4), (0.45, (20, 230, 255), 0.65), (0.72, (
 RIM_COLOR = (120, 235, 255)
 HALO_COLOR = (40, 200, 255, 0)  # BGR(A) for cv2.multiply with a scalar.
 
+# Aura styles: "classic" (scrolling noise around a distance ring, the default) and "contour" (a procedural flame
+# strip mapped along the outline by arc length; off by default until the owner approves it).
+AURA_STYLES = ("classic", "contour")
+# Contour flames. The strip is one horizontally tileable tile: columns run along the outline, rows away from it.
+STRIP_WIDTH = 256
+STRIP_HEIGHT = 48  # Rows from the outline (row 0) to the tip of the tallest tongue.
+STRIP_TONGUES = 6  # Flame tongues per tile.
+STRIP_BASE = 0.38  # Height of the band between the tongues, as a fraction of STRIP_HEIGHT.
+CONTOUR_TILE = 180.0  # Outline length of one tile, in pixels at AURA_SCALE.
+CONTOUR_REACH = 6.0 * AURA_RADIUS  # Tallest tongue on a vertical side, at AURA_SCALE and radius scale 1.
+CONTOUR_FLASH = 0.5  # Share of the flash radius growth the tongues follow (they are already long).
+CONTOUR_LEAN = 0.5  # Upward shear: flames lean up on the sides and are 1 / (1 - lean) taller on top.
+
 
 def _tone_luts(tones, edge: float = 0.025) -> tuple[np.ndarray, np.ndarray]:
     """Flat tones with short anti-aliased steps, indexed by the field (0-255)."""
@@ -239,6 +252,51 @@ class AuraGeometry:
     fade: np.ndarray
     edge: np.ndarray  # Contour points, for the sparks.
     origin: tuple  # Crop corner at AURA_SCALE: noise is sampled in frame coordinates.
+    strip_x: np.ndarray | None = None  # Contour style: strip column (arc length along the outline) per pixel.
+    strip_y: np.ndarray | None = None  # Contour style: strip row at radius scale 1 (distance from the outline).
+
+
+def contour_scale(radius_scale: float) -> float:
+    """Tongue length factor for a radius scale (the flash grows the aura)."""
+    return 1.0 + (radius_scale - 1.0) * CONTOUR_FLASH
+
+
+def contour_strip_maps(binary: np.ndarray, distance: np.ndarray, contours) -> tuple[np.ndarray, np.ndarray]:
+    """Where each pixel samples the flame strip: column from the arc length of its nearest outline point, row from
+    its distance to the outline.
+
+    Each outline is cut into a whole number of tiles, so the strip wraps around it without a seam. The maps are
+    sheared upward (`CONTOUR_LEAN`): a pixel takes the strip coordinates of a point below it, so the flames lean up on
+    the sides and grow taller above the head and shoulders.
+    """
+    rows, cols = binary.shape
+    seeds = np.ones((rows, cols), np.uint8)
+    for contour in contours:
+        points = contour.reshape(-1, 2)
+        seeds[points[:, 1], points[:, 0]] = 0
+    # Every pixel gets the label of its nearest outline pixel; a seed pixel keeps its own label.
+    _, labels = cv2.distanceTransformWithLabels(seeds, cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+    column_of = np.zeros(int(labels.max()) + 1, np.float32)
+    for contour in contours:
+        points = contour.reshape(-1, 2)
+        steps = np.linalg.norm(np.diff(points, axis=0, append=points[:1]), axis=1)
+        length = float(steps.sum())
+        if length <= 0.0:
+            continue
+        arc = np.concatenate(([0.0], np.cumsum(steps)[:-1]))
+        tiles = max(1, int(round(length / CONTOUR_TILE)))
+        column_of[labels[points[:, 1], points[:, 0]]] = (arc / length * tiles * STRIP_WIDTH) % STRIP_WIDTH
+    columns = column_of[labels]
+    xs = np.tile(np.arange(cols, dtype=np.float32), (rows, 1))
+    ys = np.arange(rows, dtype=np.float32)[:, None] + np.float32(CONTOUR_LEAN) * distance
+    ys = np.minimum(ys, np.float32(rows - 1))
+    # The column wraps: interpolate it as an angle (cos, sin), or the wrap would sweep through the whole strip.
+    angle = columns * np.float32(2 * math.pi / STRIP_WIDTH)
+    cos = cv2.remap(np.cos(angle), xs, ys, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    sin = cv2.remap(np.sin(angle), xs, ys, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    strip_x = cv2.phase(cos, sin) * np.float32(STRIP_WIDTH / (2 * math.pi))
+    strip_y = cv2.remap(distance, xs, ys, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    return strip_x, strip_y * np.float32(STRIP_HEIGHT / CONTOUR_REACH)
 
 
 class AuraRenderer:
@@ -246,9 +304,14 @@ class AuraRenderer:
 
     The aura is painted outside the silhouette only; inside it there is just a thin band of light
     along the edge. The geometry is cached per mask (10 Hz) and the flames move every frame.
+    `style="contour"` maps a procedural flame strip along the outline instead of the scrolling noise
+    (`contour_strip_maps`, `strip`); the rim light, darkening, sparks and glow are the same.
     """
 
-    def __init__(self, seed: int = 77, sparks: int = 36):
+    def __init__(self, seed: int = 77, sparks: int = 36, style: str = "classic"):
+        if style not in AURA_STYLES:
+            raise ValueError(f"Unknown aura style {style!r}: use one of {', '.join(AURA_STYLES)}")
+        self.style = style
         rng = np.random.default_rng(seed)
         self.noise = []
         for rows, cols in ((6, 28), (10, 44)):
@@ -259,6 +322,8 @@ class AuraRenderer:
         self.sparks = sparks
         # Per spark and cycle: edge point, sideways drift, rise speed, size. Cycles repeat after 64.
         self.spark_table = np.random.default_rng(seed + 1).random((sparks, 64, 4))
+        if style == "contour":
+            self._init_strip(np.random.default_rng(seed + 2))
         self.geometry_updates = 0
         self._mask: np.ndarray | None = None
         self._geometry: AuraGeometry | None = None
@@ -288,6 +353,11 @@ class AuraRenderer:
         reach = AURA_RADIUS * MAX_RADIUS_SCALE
         side = int(math.ceil((2.3 * reach + 2) / AURA_SCALE))
         rise = int(math.ceil(FLAME_RISE * reach / AURA_SCALE))
+        if self.style == "contour":
+            # The tallest tongue at the flash radius, on the sides and (sheared up) above the head.
+            tongue = CONTOUR_REACH * contour_scale(MAX_RADIUS_SCALE)
+            side = max(side, int(math.ceil((tongue + 10) / AURA_SCALE)))
+            rise = max(rise, int(math.ceil(tongue / (1.0 - CONTOUR_LEAN) / AURA_SCALE)) - side)
         left, top = max(0, x - side), max(0, y - side - rise)
         right, bottom = min(width, x + w + side), min(height, y + h + side)
         small_size = (max(2, int((right - left) * AURA_SCALE)), max(2, int((bottom - top) * AURA_SCALE)))
@@ -318,13 +388,62 @@ class AuraRenderer:
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         edge = (np.concatenate([contour.reshape(-1, 2) for contour in contours])
                 if contours else np.zeros((0, 2), np.int32))
+        strip_x = strip_y = None
+        if self.style == "contour" and contours:
+            strip_x, strip_y = contour_strip_maps(binary, outside_distance, contours)
         return AuraGeometry(
             area=np.s_[top:bottom, left:right], inside_full=body[top:bottom, left:right] > 0.5,
             person=person, inside=inside, inside_index=binary * np.uint8(255),
             aura_weight=((1.0 - person) * ~inside).astype(np.float32),
             outside_distance=outside_distance, rim=(rim * RIM_ALPHA).astype(np.float32), fade=fade,
-            edge=edge, origin=(int(left * AURA_SCALE), int(top * AURA_SCALE)),
+            edge=edge, origin=(int(left * AURA_SCALE), int(top * AURA_SCALE)), strip_x=strip_x, strip_y=strip_y,
         )
+
+    def _init_strip(self, rng: np.random.Generator) -> None:
+        """Fixed shape of the contour flame strip: tongue positions, sizes and flicker, and a tileable detail noise."""
+        self.strip_columns = (np.arange(STRIP_WIDTH, dtype=np.float32) + 0.5) / STRIP_WIDTH
+        tongues = STRIP_TONGUES
+        self.tongue_center = (np.arange(tongues) + 0.5 + rng.uniform(-0.25, 0.25, tongues)) / tongues
+        self.tongue_width = rng.uniform(0.7, 1.1, tongues)  # Half width, in tongue spacings.
+        self.tongue_height = rng.uniform(0.6, 1.0, tongues)
+        self.tongue_rate = rng.uniform(1.6, 3.4, tongues)  # Flicker, Hz.
+        self.tongue_phase = rng.random(tongues)
+        # Detail noise that tiles in both directions (whole cycles of a tiled grid): streaks along the flames.
+        grid_rows, grid_cols, factor = 4, 32, 16
+        grid = np.tile(rng.random((grid_rows, grid_cols), dtype=np.float32), (3, 3))
+        big = cv2.resize(grid, (3 * STRIP_WIDTH, 3 * grid_rows * factor), interpolation=cv2.INTER_CUBIC)
+        self.strip_noise = big[grid_rows * factor:2 * grid_rows * factor, STRIP_WIDTH:2 * STRIP_WIDTH]
+
+    def strip(self, t: float) -> np.ndarray:
+        """The flame strip at time `t`: field 0-1, bright at the outline (row 0), pointed tongues that flicker and
+        detail that flows outward. One extra column (a copy of the first) lets `cv2.remap` wrap without a seam; the
+        rows past the tips are 0."""
+        tongues = STRIP_TONGUES
+        flicker = 0.7 + 0.3 * np.sin(2 * math.pi * (self.tongue_rate * t + self.tongue_phase))
+        sway = 0.12 * np.sin(2 * math.pi * (0.5 * self.tongue_rate * t + 2 * self.tongue_phase))
+        offset = (self.strip_columns[None, :] - (self.tongue_center + sway / tongues)[:, None] + 0.5) % 1.0 - 0.5
+        across = np.abs(offset) * tongues / self.tongue_width[:, None]
+        # Concave sides: pointed tips, like hand-drawn flames.
+        bumps = (self.tongue_height * flicker)[:, None] * np.clip(1.0 - across, 0.0, 1.0) ** 1.6
+        height = np.maximum(np.float32(STRIP_BASE), bumps.max(axis=0)).astype(np.float32)
+        rows = np.arange(STRIP_HEIGHT, dtype=np.float32)[:, None] / STRIP_HEIGHT
+        shape = np.clip(1.0 - rows / height[None, :], 0.0, 1.0)
+        size = self.strip_noise.shape[0]
+        flow = (np.arange(STRIP_HEIGHT) - int(t * 90.0)) % size  # The detail moves away from the body.
+        field = np.zeros((STRIP_HEIGHT + 1, STRIP_WIDTH + 1), np.float32)
+        # The detail grows away from the outline: the core next to the body stays solid.
+        detail = (self.strip_noise[flow] - 0.5) * np.minimum(1.0, rows * 4.0) * 0.8
+        field[:STRIP_HEIGHT, :STRIP_WIDTH] = np.clip(shape * (1.0 + detail), 0.0, 1.0)
+        field[:, STRIP_WIDTH] = field[:, 0]
+        return field
+
+    def _contour_field(self, geometry: AuraGeometry, t: float, radius_scale: float) -> np.ndarray:
+        if geometry.strip_x is None:
+            return np.zeros_like(geometry.person)
+        scale = contour_scale(radius_scale) * (1.0 + 0.12 * math.sin(2 * math.pi * 3.0 * t))
+        rows = geometry.strip_y * np.float32(1.0 / scale)
+        return cv2.remap(self.strip(t), geometry.strip_x, rows, cv2.INTER_LINEAR,
+                         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
     def _noise(self, geometry: AuraGeometry, t: float) -> np.ndarray:
         rows, cols = geometry.person.shape
@@ -352,14 +471,18 @@ class AuraRenderer:
         area = geometry.area
         np.copyto(result[area], frame[area], where=geometry.inside_full[:, :, None])
 
-        radius = AURA_RADIUS * radius_scale * (1.0 + 0.12 * math.sin(2 * math.pi * 3.0 * t))
-        ring = cv2.exp(geometry.outside_distance * np.float32(-1.0 / radius))
-        # The flames rise: each row takes light from the rows below (two boxes ~ a decaying kernel).
-        rows = max(2, int(FLAME_RISE * radius))
-        rising = (cv2.blur(ring, (1, rows), anchor=(0, 0), borderType=cv2.BORDER_REPLICATE)
-                  + cv2.blur(ring, (1, max(2, rows // 2)), anchor=(0, 0), borderType=cv2.BORDER_REPLICATE)) * 0.5
-        ring = np.maximum(ring, rising * 1.6)
-        field = ring * (self._noise(geometry, t) * 1.3 + 0.1) * (geometry.fade * np.float32(255.0 * intensity))
+        if self.style == "contour":
+            field = self._contour_field(geometry, t, radius_scale) * (geometry.fade * np.float32(255.0 * intensity))
+        else:
+            radius = AURA_RADIUS * radius_scale * (1.0 + 0.12 * math.sin(2 * math.pi * 3.0 * t))
+            ring = cv2.exp(geometry.outside_distance * np.float32(-1.0 / radius))
+            # The flames rise: each row takes light from the rows below (two boxes ~ a decaying kernel).
+            rows = max(2, int(FLAME_RISE * radius))
+            rising = (cv2.blur(ring, (1, rows), anchor=(0, 0), borderType=cv2.BORDER_REPLICATE)
+                      + cv2.blur(ring, (1, max(2, rows // 2)), anchor=(0, 0),
+                                 borderType=cv2.BORDER_REPLICATE)) * 0.5
+            ring = np.maximum(ring, rising * 1.6)
+            field = ring * (self._noise(geometry, t) * 1.3 + 0.1) * (geometry.fade * np.float32(255.0 * intensity))
         index = np.clip(field, 0, 254).astype(np.uint8)
         # Inside the silhouette there is only the rim light (LUT entry 255).
         index = cv2.max(index, geometry.inside_index)

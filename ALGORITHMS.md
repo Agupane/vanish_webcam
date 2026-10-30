@@ -162,9 +162,22 @@ version: ~5.9 ms on the same CPU); not re-measured after the eye-line silhouette
 background step. `tools/aura_preview.py` renders the look on a synthetic scene. `test_fast_enough_for_live_video` uses
 a mask refresh every third frame, with a 20 ms budget.
 
+Optional style `AuraRenderer(style="contour")` (E3.1, off by default; the classic path above is untouched):
+
+- per mask update, `contour_strip_maps`: the outline pixels (`findContours`) are the seeds of
+  `cv2.distanceTransformWithLabels(DIST_LABEL_PIXEL)`, so every pixel gets its nearest outline point; that point's arc
+  length gives the strip column (each outline is a whole number of `CONTOUR_TILE` tiles: no seam), the outside distance
+  gives the row. Both maps are sheared upward (`CONTOUR_LEAN`: a pixel samples the point `lean × d` below it), which
+  makes the flames lean up on the sides and 1 / (1 − lean) taller on top. The column is interpolated as an angle
+  (cos/sin + `cv2.phase`) so the wrap does not smear. Larger crop margins for this style only.
+- per frame, `strip(t)`: a 49×257 field (pointed tongues with per-tongue flicker and sway, tileable detail noise
+  flowing outward; solid core at the outline), then one `cv2.remap` at half resolution; the rest (LUT tones, rim,
+  sparks, glow, blend) is shared with the classic style.
+- cost: see the measured numbers in the E3.1 note of HANDOFF-SUPER-SAIYAN.md; `ContourAuraTests` keeps a 25 ms budget.
+
 Ideas:
 
-1. Contour-mapped flame strip (`distanceTransformWithLabels` + `cv2.remap`), see HANDOFF-SUPER-SAIYAN.md §4.3.
+1. Pre-rendered flame strip asset (E3.2) in place of `strip(t)`; the maps stay the same.
 2. Drop or reduce sparks on slow machines; they are cosmetic.
 3. Expose the aura radius, darkening and tone colors as options if the owner wants to tune them without code.
 
@@ -249,7 +262,7 @@ machine may be running other apps (including VanishCam itself).
 | `vanish_cam.py` | `run_camera` (loop), `person_mask`, `person_in_frame`, `GestureHold`, `apply_dissolve`, `make_dissolve_fields`, `render_status_panel`, `compose_dashboard`, `draw_setup_marks`, `choose_camera_window`, `open_camera`, `open_virtual_camera`, `power_active`, `download_models` |
 | `dragonball_effect.py` | `instant_transmission`, `InstantTransmissionDetector`, `render_teleport`, `speed_lines`, `person_alpha`, `write_teleport_sound` |
 | `naruto_effect.py` | `joined_hands_from_landmarks`, `substitution_anchor`, `render_substitution`, `render_reappearance`, `_smoke_layer`, `overlay_log` |
-| `super_saiyan_effect.py` | `charge_pose`, `hand_tension`, `AuraRenderer`, `PowerState`, `render_super_saiyan`, `shake_frame`, `write_charge_sound`, `write_transform_sound`, `write_aura_hum` |
+| `super_saiyan_effect.py` | `charge_pose`, `hand_tension`, `AuraRenderer` (styles `AURA_STYLES`), `contour_strip_maps`, `PowerState`, `render_super_saiyan`, `shake_frame`, `write_charge_sound`, `write_transform_sound`, `write_aura_hum` |
 | `vanish_sound.py` | `VanishSound` (pygame/ffplay, loops, fades, device) |
 | `test_video_output.py` | `run_loop` (fake clock, fake camera/segmenter/recognizer) |
 | `test_super_saiyan_effect.py` | pose, power state, aura and performance tests |

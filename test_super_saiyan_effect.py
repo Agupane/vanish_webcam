@@ -224,6 +224,94 @@ class AuraTests(unittest.TestCase):
         self.assertLess(min(samples), 0.02)
 
 
+class ContourAuraTests(unittest.TestCase):
+    """Style "contour": a procedural flame strip mapped along the outline (off by default)."""
+
+    def setUp(self):
+        self.frame = np.full((240, 320, 3), 60, np.uint8)
+        self.mask = np.zeros((240, 320), np.float32)
+        self.mask[80:240, 130:190] = 1.0
+        self.aura = ssj.AuraRenderer(style="contour")
+
+    def test_default_style_is_classic_and_unknown_styles_fail(self):
+        self.assertEqual(ssj.AuraRenderer().style, "classic")
+        np.testing.assert_array_equal(ssj.AuraRenderer().render(self.frame, self.mask, 1.0, 0.7),
+                                      ssj.AuraRenderer(style="classic").render(self.frame, self.mask, 1.0, 0.7))
+        with self.assertRaises(ValueError):
+            ssj.AuraRenderer(style="lava")
+
+    def test_never_paints_inside_the_person(self):
+        frame = np.full((240, 320, 3), 60, np.uint8)
+        frame[self.mask > 0] = (200, 150, 60)
+        darkened = cv2.convertScaleAbs(frame, alpha=1.0 - ssj.DARKEN)
+        for t in (0.0, 0.33, 1.7):
+            output = self.aura.render(frame, self.mask, 1.0, t, radius_scale=2.5)
+            inner = output[100:240, 145:175]  # Deeper than the rim light.
+            np.testing.assert_array_equal(inner, frame[100:240, 145:175])
+            self.assertFalse(np.array_equal(output[50:80], darkened[50:80]))  # It is drawing something.
+
+    def test_flames_on_the_left_right_and_top(self):
+        output = self.aura.render(self.frame, self.mask, 1.0, 1.0).astype(int)
+        for name, (row, col) in {"left": (150, 125), "right": (150, 194), "top": (75, 160)}.items():
+            with self.subTest(name):
+                pixel = output[row, col]
+                self.assertGreater(pixel[2], 60 + 30)  # Yellow next to the outline.
+                self.assertGreater(pixel[1], 60 + 30)
+                self.assertGreater(pixel[2], pixel[0] + 30)
+        self.assertLess(output[5, 5].max(), 60)  # Far away: only the darkening.
+
+    def test_strip_wraps_around_every_outline_without_a_seam(self):
+        mask = np.zeros((120, 160), np.uint8)
+        cv2.circle(mask, (80, 60), 30, 1, -1)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        distance = cv2.distanceTransform(1 - mask, cv2.DIST_L2, 3)
+        columns, rows = ssj.contour_strip_maps(mask, distance, contours)
+        ring = (distance > 0) & (distance < 2)
+        # The whole strip is used all the way around: every column bucket appears next to the outline.
+        buckets = np.unique((columns[ring] * 16 // ssj.STRIP_WIDTH).astype(int))
+        np.testing.assert_array_equal(buckets, np.arange(16))
+        self.assertLessEqual(rows[ring].max(), 4 * ssj.STRIP_HEIGHT / ssj.CONTOUR_REACH)  # Base of the flames.
+        # The strip itself tiles: its extra column repeats the first one.
+        strip = self.aura.strip(0.4)
+        np.testing.assert_array_equal(strip[:, -1], strip[:, 0])
+        self.assertEqual(strip[-1].max(), 0.0)
+        self.assertGreater(strip[0].min(), 0.9)  # Bright core at the outline.
+
+    def test_flames_are_taller_above_than_beside(self):
+        mask = np.zeros((200, 200), np.uint8)
+        mask[80:200, 70:130] = 1
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        distance = cv2.distanceTransform(1 - mask, cv2.DIST_L2, 3)
+        _, rows = ssj.contour_strip_maps(mask, distance, contours)
+        self.assertLess(rows[80 - 20, 100], rows[140, 70 - 20] * 0.7)  # Same distance, lower strip row on top.
+
+    def test_deterministic_and_moving(self):
+        first = self.aura.render(self.frame, self.mask, 1.0, 2.5)
+        second = ssj.AuraRenderer(style="contour").render(self.frame, self.mask, 1.0, 2.5)
+        np.testing.assert_array_equal(first, second)
+        self.assertTrue(np.any(first != self.aura.render(self.frame, self.mask, 1.0, 2.6)))
+        self.assertEqual(self.aura.geometry_updates, 1)
+
+    def test_fast_enough_for_live_video(self):
+        frame = np.full((540, 960, 3), 200, np.uint8)
+        mask = np.zeros((540, 960), np.float32)
+        mask[150:540, 380:580] = 1.0
+        head = ((480, 230), (70, 90), 0.0)
+        aura = ssj.AuraRenderer(style="contour")
+        levels = ssj.PowerLevels(aura=1.0)
+        ssj.render_super_saiyan(frame, mask, levels, 0.0, aura, head)
+        samples = []
+        current = mask
+        for _ in range(3):
+            started = time.perf_counter()
+            for index in range(15):
+                if index % 3 == 0:
+                    current = mask.copy()
+                ssj.render_super_saiyan(frame, current, levels, index / 30, aura, head)
+            samples.append((time.perf_counter() - started) / 15)
+        self.assertLess(min(samples), 0.025)
+
+
 def chair_scene():
     """A high-back chair behind a person with dark hair; the segmenter takes the chair too."""
     height, width = 270, 480

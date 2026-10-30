@@ -81,8 +81,14 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
 
 ### E3 — Realism 2: flames mapped to the contour, eyes (§4.2, §4.3)
 
-- [ ] **E3.1 Contour mapping with a procedural tileable strip** (`distanceTransformWithLabels` + arc length +
+- [x] **E3.1 Contour mapping with a procedural tileable strip** (`distanceTransformWithLabels` + arc length +
   `cv2.remap`). *Check:* unit tests (never inside the person, wraps around the whole outline, deterministic); renders.
+  *Done on `feat/ssj-contour-flames`, **off by default**: `AuraRenderer(style="contour")` (`contour_strip_maps`,
+  `strip`); the classic aura is still the default and unchanged. Upward shear `CONTOUR_LEAN` (tongues lean up, taller
+  on top). `ContourAuraTests` (7 tests). Renders with `tools/aura_preview.py --style contour`: pointed golden tongues,
+  near-white core at the body, flicker. claude-bcn, 960×540: 5.0 ms/frame cached and 6.4 ms with a new mask every
+  3rd frame (classic 4.1 / 4.7 ms); geometry 3.1 ms per mask (classic 1.1 ms). Not wired to the app yet (needs a
+  setting in `vanish_cam.py` / `home_ui.py`); owner gate E3.4 pending.*
 - [ ] **E3.2 Pre-rendered flame strip asset** (fire simulation with a toon shader, looping, tileable, < 3 MB, origin in
   NOTICE.md). *Check:* loop has no visible seam; cost per frame ≤ E1 aura.
 - [x] **E3.3 Iris tint** (teal/green, luminance-preserving, FaceLandmarker iris points 468–477). *Check:* unit test on
