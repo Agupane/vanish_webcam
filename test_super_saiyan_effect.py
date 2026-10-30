@@ -482,6 +482,20 @@ class SuperSaiyanLoopTests(unittest.TestCase):
         self.assertEqual([call.kwargs for call in saved.call_args_list],
                          [{"eyes": False}, {"brows": False}, {"eyes": True}])
 
+    def test_key_g_switches_the_hair_off_live_leaving_only_the_aura(self):
+        hair = Mock()
+        hair.place_live.return_value = None
+        hair.mask.return_value = None
+        with patch.object(app.home_ui, "update_settings") as saved, \
+                patch.object(app.ssj, "render_super_saiyan", side_effect=lambda frame, *a, **k: frame.copy()) as render:
+            _, _, _, _, printed = run_loop(mode="dragonball", keys={50: ord("s"), 60: ord("g")},
+                                           mask=person_in_middle(), seconds=8.0, ssj_hair=True, hair=hair)
+        self.assertEqual([call.kwargs for call in saved.call_args_list], [{"hair": False}])
+        self.assertTrue(any("Golden hair off" in line for line in printed))
+        passed = [call.args[7] for call in render.call_args_list]
+        self.assertIs(passed[0], hair)  # Before G: the imported hair.
+        self.assertIsNone(passed[-1])  # After G: aura only.
+
     def test_teleport_while_transformed_cuts_and_resumes_the_hum(self):
         teleport = lambda t: 6.0 <= t < 7.3 or 8.5 <= t < 9.8
         frames, shown, _, sound, _ = run_loop(

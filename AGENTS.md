@@ -21,6 +21,7 @@ Algorithm inventory, measured costs, hot spots and the optimization backlog: [AL
 | `vanish_sound.py` | Plays an effect sound (pygame, or `ffplay` fallback); `play(loops, fade_ms)`, `stop(fade_ms)`, `set_volume` |
 | `ssj_face.py` | Super Saiyan face: teal irises, golden brows, import of the user's golden hair pictures (`ssj_hair/ssj_*.png`) and `HairOverlay`, which fits the hair on the live face (`place_live`: view fade + tips warp, `PlacedHair` shared with the aura) |
 | `ssj_motion.py` | Hair motion, pure NumPy/OpenCV with an injected clock: `fit_similarity` (weighted, deterministic), `HeadTracker` (a face every frame from ~12.5 Hz detections: alpha-beta filter + decaying prediction), `HairDynamics` (spring sway, power-up kick), `hair_warp_maps` (roots fixed, tips move, ki flutter) |
+| `frame_source.py` | `VideoFileSource` (`--input-video`: a clip paced like a webcam, looping), `LatestFrameCapture` (capture thread keeping only the newest frame; on by default, `--no-capture-thread`), `StageBench` (`--bench N`: per-stage p50/p95 and CPU %) |
 | `tools/aura_preview.py` | Renders the Super Saiyan aura on a synthetic scene (light/dark wall, chair) for tuning without a camera |
 | `test_*.py` | unittest suite; `run_loop()` in `test_video_output.py` drives the real loop with a fake clock |
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
@@ -62,7 +63,7 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
 - **Cameras:** `find_cameras` returns `[(source, label)]`: Linux from sysfs (v4l2loopback skipped), Windows from
   `pygrabber` in DirectShow order (= OpenCV index with `CAP_DSHOW`), hiding names in `VIRTUAL_CAMERA_WORDS` (OBS
   Virtual Camera is a DirectShow camera too: never read our own output); macOS has no picker yet.
-- **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear (restart setup while calibrating), `S` Super Saiyan on/off (Dragon Ball), `E` / `B` teal eyes / golden brows on/off (saved), `SPACE` recalibrate (also the panel's buttons: `panel_controls` / `panel_buttons` / `panel_hit`, mouse callback on `WINDOW_NAME`, acting on press), `P` pause/resume, `F` fullscreen, `Q`/`ESC` quit.
+- **Keys** (OpenCV window must have focus): `V` vanish, `R` reappear (restart setup while calibrating), `S` Super Saiyan on/off (Dragon Ball), `E` / `B` / `G` teal eyes / golden brows / imported golden hair on/off (saved; hair off = aura only), `SPACE` recalibrate (also the panel's buttons: `panel_controls` / `panel_buttons` / `panel_hit`, mouse callback on `WINDOW_NAME`, acting on press), `P` pause/resume, `F` fullscreen, `Q`/`ESC` quit.
 - **Guided setup:** during calibration the preview outlines the detected person (`draw_setup_marks`, HUD only) and the side panel says whether to step out; `P` freezes the loop and `R` restarts calibration.
 - **Mirroring:** the preview is mirrored; the virtual camera gets the unmirrored image unless `--mirror-output`.
 - **Status panel:** `render_status_panel` + `compose_dashboard` add a side panel with the next step, keys and recent

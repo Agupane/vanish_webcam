@@ -26,6 +26,7 @@ from mediapipe.tasks.python import vision
 
 try:
     from . import dragonball_effect as dragonball
+    from . import frame_source
     from . import home_ui
     from . import ssj_face
     from . import ssj_motion
@@ -37,6 +38,7 @@ try:
     from .vanish_sound import SOUND_PATH, VanishSound
 except ImportError:
     import dragonball_effect as dragonball
+    import frame_source
     import home_ui
     import ssj_face
     import ssj_motion
@@ -174,6 +176,13 @@ def positive_fps(value: str) -> float:
     if not np.isfinite(fps) or not 1 <= fps <= 120:
         raise argparse.ArgumentTypeError("FPS must be between 1 and 120.")
     return fps
+
+
+def positive_int(value: str) -> int:
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return number
 
 
 def camera_source(value: str) -> int | str:
@@ -366,6 +375,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-ssj-brows", dest="ssj_brows", action="store_false",
         help="Super Saiyan: keep your own eyebrows (no golden tint)",
+    )
+    parser.add_argument(
+        "--no-ssj-hair", dest="ssj_hair", action="store_false",
+        help="Super Saiyan: keep your own hair (no imported golden hair; aura only)",
+    )
+    parser.add_argument(
+        "--capture-thread", action=argparse.BooleanOptionalAction, default=True,
+        help="Read the webcam in a thread and always use its newest frame (default: on)",
+    )
+    parser.add_argument(
+        "--input-video", metavar="PATH",
+        help="Use a recorded clip instead of the webcam (played at its own speed, looping; never written)",
+    )
+    parser.add_argument(
+        "--bench", type=positive_int, metavar="N",
+        help="Measure N frames, print per-stage p50/p95 times and the CPU use, then exit",
+    )
+    parser.add_argument(
+        "--bench-super-saiyan", action="store_true",
+        help="With --bench in Dragon Ball mode: transform as soon as the background is ready",
+    )
+    parser.add_argument(
+        "--headless", action="store_true",
+        help="No preview window (for --bench on a machine without a display); stop with Ctrl+C",
     )
     parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
@@ -1187,12 +1220,21 @@ PANEL_BUTTON_HEIGHT = 34
 PANEL_BUTTON_GAP = 8
 
 
-def panel_controls(super_saiyan: bool, eyes: bool, brows: bool) -> list[tuple[str, str, bool | None]]:
+def panel_controls(super_saiyan: bool, eyes: bool, brows: bool,
+                   hair: bool = True) -> list[tuple[str, str, bool | None]]:
     """Clickable buttons of the side panel: (name, label, toggle state or None for a plain button)."""
     controls: list[tuple[str, str, bool | None]] = [("recalibrate", "Recalibrate background (SPACE)", None)]
     if super_saiyan:
-        controls += [("eyes", "Teal eyes (E)", eyes), ("brows", "Gold brows (B)", brows)]
+        controls += [("eyes", "Eyes (E)", eyes), ("brows", "Brows (B)", brows), ("hair", "Hair (G)", hair)]
     return controls
+
+
+# Super Saiyan switches: setting name, args attribute, label for the log.
+FACE_SWITCHES = {
+    "eyes": ("ssj_eyes", "Teal eyes"),
+    "brows": ("ssj_brows", "Golden eyebrows"),
+    "hair": ("ssj_hair", "Golden hair"),
+}
 
 
 def panel_buttons(width: int, height: int, count: int) -> list[tuple[int, int, int, int]]:
@@ -1243,7 +1285,7 @@ def render_status_panel(width: int, height: int, mode: str, phase: str, camera: 
     y = _panel_line(panel, "KEYS", x, y, 0.46, (120, 135, 145))
     for line in ("V vanish   R reappear   S Super Saiyan",
                  "P pause   SPACE background   F fullscreen",
-                 "E eyes   B eyebrows (Super Saiyan)   Q quit"):
+                 "E eyes  B brows  G hair   Q quit"):
         y = _panel_line(panel, line, x, y, 0.48, (185, 195, 202))
     rects = panel_buttons(width, height, len(controls))
     bottom = (rects[0][1] - 10) if rects else height - 12
@@ -1511,6 +1553,7 @@ def initial_home_settings(args: argparse.Namespace, saved: dict,
     # The command line can only switch them off; otherwise the last choice in the window is kept.
     settings.eyes = bool(saved.get("eyes", True)) and getattr(args, "ssj_eyes", True)
     settings.brows = bool(saved.get("brows", True)) and getattr(args, "ssj_brows", True)
+    settings.hair = bool(saved.get("hair", True)) and getattr(args, "ssj_hair", True)
     if args.camera is not None:
         settings.camera, settings.camera_label = args.camera, camera_label(args.camera)
     elif cameras:
@@ -1543,7 +1586,7 @@ def run() -> int:
         if chosen is None:
             return 0
         args.camera, mode = chosen.camera, chosen.mode
-        args.ssj_eyes, args.ssj_brows = chosen.eyes, chosen.brows
+        args.ssj_eyes, args.ssj_brows, args.ssj_hair = chosen.eyes, chosen.brows, chosen.hair
     else:
         mode = choose_mode() if getattr(args, "menu", False) else (args.mode or DEFAULT_MODE)
     if mode is None:
@@ -1555,15 +1598,26 @@ def run() -> int:
 def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int:
     download_models(mode)
     camera_info: dict[str, str] = {}
-    capture = open_camera(args.camera, args.width, args.height, camera_info)
-    camera_name = camera_info.get("label", "auto")
+    input_video = getattr(args, "input_video", None)
+    if input_video:
+        capture = frame_source.VideoFileSource(input_video)
+        camera_name = Path(input_video).name
+        print(f"[Webcam] Using the clip {camera_name} instead of a webcam.")
+    else:
+        capture = open_camera(args.camera, args.width, args.height, camera_info)
+        camera_name = camera_info.get("label", "auto")
+        capture.set(cv2.CAP_PROP_FPS, args.fps)
+    if getattr(args, "capture_thread", False):
+        capture = frame_source.LatestFrameCapture(capture)
     resources.callback(capture.release)
     log_lines: deque[str] = deque(maxlen=24)
 
     def log(message: str) -> None:
         print(message)
         log_lines.append(message)
-    capture.set(cv2.CAP_PROP_FPS, args.fps)
+    bench = frame_source.StageBench(args.bench) if getattr(args, "bench", None) else None
+    stage = bench.stage if bench is not None else frame_source.no_stage
+    bench_super_saiyan = bench is not None and getattr(args, "bench_super_saiyan", False)
     segmenter, recognizer = create_tasks(mode)
     resources.callback(segmenter.close)
     resources.callback(recognizer.close)
@@ -1594,9 +1648,11 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         for extra in (charge_sound, transform_sound, hum_sound):
             resources.callback(extra.close)
     resources.callback(cv2.destroyAllWindows)
-    hud = not getattr(args, "no_hud", False)
-    cv2.namedWindow(WINDOW_NAME, window_flags())
-    cv2.resizeWindow(WINDOW_NAME, args.width + (PANEL_WIDTH if hud else 0), args.height)
+    headless = getattr(args, "headless", False)
+    hud = not getattr(args, "no_hud", False) and not headless
+    if not headless:
+        cv2.namedWindow(WINDOW_NAME, window_flags())
+        cv2.resizeWindow(WINDOW_NAME, args.width + (PANEL_WIDTH if hud else 0), args.height)
 
     state = AppState(
         calibration_started=time.perf_counter(), fullscreen=args.fullscreen
@@ -1638,7 +1694,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         log("[Webcam] Closed fists in front of your face, one on each side, for 1.5 seconds: Super Saiyan. "
             "Repeat (or press S) to go back to normal.")
         hair = load_hair(log)
-    log("[Webcam] Keys in the window: V vanish, R reappear/restart setup, S Super Saiyan, "
+    log("[Webcam] Keys in the window: V vanish, R reappear/restart setup, S Super Saiyan "
+        "(E eyes, B brows, G hair), "
         "SPACE background, P pause, F fullscreen, Q quit.")
 
     def transform(now: float) -> None:
@@ -1710,7 +1767,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     panel_cache: dict[tuple, np.ndarray] = {}
 
     def controls() -> list:
-        return panel_controls(super_saiyan, getattr(args, "ssj_eyes", True), getattr(args, "ssj_brows", True))
+        return panel_controls(super_saiyan, getattr(args, "ssj_eyes", True), getattr(args, "ssj_brows", True),
+                              getattr(args, "ssj_hair", True))
 
     clicked: list[str | None] = [None]
     panel_origin = [0, 0]  # Where the panel starts in the window (the video width) and its height.
@@ -1724,11 +1782,10 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         cv2.setMouseCallback(WINDOW_NAME, on_mouse)
 
     def toggle_face(name: str) -> None:
-        attribute = "ssj_eyes" if name == "eyes" else "ssj_brows"
+        attribute, label = FACE_SWITCHES[name]
         value = not getattr(args, attribute, True)
         setattr(args, attribute, value)
         home_ui.update_settings(SETTINGS_PATH, **{name: value})
-        label = "Teal eyes" if name == "eyes" else "Golden eyebrows"
         log(f"[Super Saiyan] {label} {'on' if value else 'off'}.")
 
     def status_panel(phase_key: str, action: str, height: int, lines) -> np.ndarray:
@@ -1746,7 +1803,10 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         return panel
     try:
         while True:
-            ok, camera_frame = capture.read()
+            if bench is not None:
+                bench.frame_started()
+            with stage("capture"):
+                ok, camera_frame = capture.read()
             if not ok:
                 raise RuntimeError("The webcam stopped sending frames.")
             frame_index += 1
@@ -1803,7 +1863,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
             def update_mask(every: float) -> np.ndarray | None:
                 nonlocal last_mask, last_mask_at
                 if last_mask is None or now - last_mask_at >= every:
-                    last_mask = person_mask(segmenter, frame_image(), elapsed_ms, width, height)
+                    with stage("mask"):
+                        last_mask = person_mask(segmenter, frame_image(), elapsed_ms, width, height)
                     last_mask_at = now
                 return last_mask
 
@@ -1846,6 +1907,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     state.phase = "ready"
                     hold.reset()
                     log("[Webcam] Background ready. You can step back into the frame.")
+                    if bench_super_saiyan and super_saiyan and not power.transformed:
+                        transform(now)
 
             elif background is None:
                 begin_calibration(now)
@@ -1857,7 +1920,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     debug = args.gesture_debug and now - last_gesture_report >= 1.0
                     if debug:
                         last_gesture_report = now
-                    active = gesture_active(mode, recognizer, frame_image(), elapsed_ms, debug)
+                    with stage("gestures"):
+                        active = gesture_active(mode, recognizer, frame_image(), elapsed_ms, debug)
                     if hold.update(active, now):
                         hold_announced = False
                         start_effect("vanishing" if state.phase == "ready" else "appearing",
@@ -1965,21 +2029,27 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                     if is_new:
                         last_face_seen[:] = [detected_ms, faces]
                         detection = ssj_face.points_from_landmarks(faces[0], width, height)
+                    effect_started = time.perf_counter() if bench is not None else 0.0
                     face = head_tracker.update(
                         seconds, detection, None if detected_ms is None or not is_new else detected_ms / 1000.0)
                     placed = None
+                    # Switched off: the user's own hair, aura only.
+                    live_hair = hair if getattr(args, "ssj_hair", True) else None
                     if face is not None:
                         hair_dynamics.step(seconds, *ssj_face.head_pose(face))
-                        if hair is not None:
-                            placed = hair.place_live(face, camera_frame.shape, seconds,
-                                                     hair_dynamics.motion(levels.aura), head_tracker.yaw)
+                        if live_hair is not None:
+                            placed = live_hair.place_live(face, camera_frame.shape, seconds,
+                                                          hair_dynamics.motion(levels.aura), head_tracker.yaw)
                     # The head lets the aura drop the chair from the silhouette.
                     head = ssj.head_ellipse_from_points(face)
                     display = ssj.render_super_saiyan(camera_frame, mask, levels, now, aura, head,
-                                                      face, hair, latest_hands(recognizer),
+                                                      face, live_hair, latest_hands(recognizer),
                                                       getattr(args, "ssj_eyes", True),
                                                       getattr(args, "ssj_brows", True), placed)
+                    if bench is not None:
+                        bench.samples["super"].append(time.perf_counter() - effect_started)
 
+            output_started = time.perf_counter() if bench is not None else 0.0
             view_display = display
             if hud and state.phase == "calibrating":
                 view_display = draw_setup_marks(display.copy(), update_mask(0.3))
@@ -1992,15 +2062,21 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
             )
             panel = status_panel(phase_key, action, display.shape[0], log_lines)
             panel_origin[:] = [view_display.shape[1], display.shape[0]]
-            cv2.imshow(WINDOW_NAME, compose_dashboard(view_display, panel) if hud else view_display)
-
-            key = cv2.waitKey(1) & 0xFF
+            if not headless:
+                cv2.imshow(WINDOW_NAME, compose_dashboard(view_display, panel) if hud else view_display)
+            key = cv2.waitKey(1) & 0xFF if not headless else 0xFF
+            if bench is not None:
+                bench.samples["output"].append(time.perf_counter() - output_started)
+                if bench.frame_finished():
+                    break
             button, clicked[0] = clicked[0], None
             if key in (ord("e"), ord("E")):
                 button = "eyes"
             elif key in (ord("b"), ord("B")):
                 button = "brows"
-            if button in ("eyes", "brows") and super_saiyan:
+            elif key in (ord("g"), ord("G")):
+                button = "hair"
+            if button in FACE_SWITCHES and super_saiyan:
                 toggle_face(button)
             if key in (ord("q"), 27):
                 break
@@ -2039,6 +2115,9 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 virtual_camera.sleep_until_next_frame()
     finally:
         resources.close()
+        if bench is not None:
+            for line in bench.report():
+                print(line)
 
     return 0
 

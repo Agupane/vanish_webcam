@@ -129,6 +129,20 @@ class HomeLoopTests(unittest.TestCase):
         result = self.run_home([ord("e"), ord("e"), 13])
         self.assertTrue(result.eyes)
 
+    def test_hair_switch_leaves_only_the_aura(self):
+        buttons = home_ui.layout(False, True)
+        result = self.run_home([ord("g"), 13])
+        self.assertEqual((result.eyes, result.brows, result.hair), (True, True, False))
+        result = self.run_home([center(buttons, "hair"), center(buttons, "hair"), 13])
+        self.assertTrue(result.hair)
+
+    def test_switches_fit_inside_the_window(self):
+        for button in home_ui.layout(True, True):
+            if button.name == "start":
+                continue
+            x0, y0, x1, y1 = button.rect
+            self.assertTrue(0 <= x0 < x1 <= home_ui.WIDTH and 0 <= y0 < y1 < home_ui.MESSAGES_TOP - 20, button)
+
     def test_hair_buttons_only_for_dragon_ball(self):
         photos = Mock(return_value=[])
         result = self.run_home([ord("2"), ord("t"), 13], take_photos=photos)
@@ -143,7 +157,8 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(home_ui.load_settings(path), {})
             home_ui.save_settings(path, home_ui.HomeSettings("naruto", 2, "Logitech C920"))
             self.assertEqual(home_ui.load_settings(path),
-                             {"mode": "naruto", "camera": "Logitech C920", "eyes": True, "brows": True})
+                             {"mode": "naruto", "camera": "Logitech C920", "eyes": True, "brows": True,
+                              "hair": True})
             path.write_text("[1, 2")
             self.assertEqual(home_ui.load_settings(path), {})
             path.write_text(json.dumps([1, 2]))
@@ -171,6 +186,13 @@ class SettingsTests(unittest.TestCase):
         args.ssj_brows = False
         settings = app.initial_home_settings(args, {}, [])
         self.assertEqual((settings.eyes, settings.brows), (True, False))
+
+    def test_hair_remembered_and_switched_off_from_the_command_line(self):
+        args = argparse.Namespace(camera=None, mode="dragonball", ssj_hair=True)
+        self.assertFalse(app.initial_home_settings(args, {"hair": False}, []).hair)
+        self.assertTrue(app.initial_home_settings(args, {}, []).hair)
+        args.ssj_hair = False
+        self.assertFalse(app.initial_home_settings(args, {"hair": True}, []).hair)
 
 
 class VersionTests(unittest.TestCase):

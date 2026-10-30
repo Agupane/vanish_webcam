@@ -68,8 +68,17 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
 - [ ] **E2.1 Benchmark harness.** `--input-video PATH` (frames from a file, never written back) and `--bench N`
   (per-stage p50/p95 ms and process CPU %). *Check:* runs on an owner-recorded clip on Ubuntu and Windows; baseline
   numbers committed to ALGORITHMS.md.
-- [ ] **E2.2 Capture thread** that keeps only the latest frame. *Check:* unit test with a fake slow camera; bench shows
+  *Code done (`frame_source.py`: `VideoFileSource` paced to the clip FPS and looping, `StageBench`; flags
+  `--input-video`, `--bench N`, `--bench-super-saiyan`, `--headless`; stages capture / mask / gestures / super /
+  output + frame). Tests: `test_frame_source.py` (incl. the real loop in bench + headless mode). Open: run on an
+  owner clip on Ubuntu and Windows and commit the numbers, e.g.
+  `python vanish_cam.py --input-video clip.mp4 --bench 600 --bench-super-saiyan --no-virtual-camera` (the clip must
+  start with ~5 s of empty room for the calibration).*
+- [x] **E2.2 Capture thread** that keeps only the latest frame. *Check:* unit test with a fake slow camera; bench shows
   no queued/stale frames.
+  *Done: `LatestFrameCapture`, on by default (`--no-capture-thread` to compare); `LatestFrameCaptureTests` (slow loop
+  gets the newest frame, never the same frame twice, a camera that stops is reported). Bench comparison on the owner's
+  machines pending with E2.1.*
 - [ ] **E2.3 Async inference** (`RunningMode.LIVE_STREAM`, `detect_async`/`segment_async`, latest result reused).
   *Check:* bench p95 frame time < 33 ms on the owner's machines; loop tests still pass with the fake clock.
 - [ ] **E2.4 Adaptive detection** (4–5 Hz with no hands, 12–15 Hz with hands, full rate during a hold; thumbnail motion

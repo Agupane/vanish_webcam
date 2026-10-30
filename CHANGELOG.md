@@ -7,6 +7,16 @@ All notable changes to this fork are documented here. The format is based on
 
 ### Changed
 
+- Super Saiyan: the imported golden hair can be switched off too, leaving only the aura (and the eyes/brows if on):
+  **Gold hair** checkbox in the home window and the side panel, key `G`, or `--no-ssj-hair`; remembered like the
+  eyes and brows. The side panel shows the three switches on one row (Eyes / Brows / Hair).
+
+- Fluidity groundwork: the webcam is read in a thread that keeps only the newest frame (`--no-capture-thread` turns
+  it off), so a slow frame no longer leaves the next ones queued with extra delay. `--input-video PATH` plays a
+  recorded clip instead of the webcam (paced to its FPS, looping, never written), and `--bench N` prints per-stage
+  p50/p95 times and the CPU use after N frames; `--bench-super-saiyan` transforms as soon as the background is ready
+  and `--headless` runs without a window (`frame_source.py`).
+
 - Live controls in the side panel: **Recalibrate background** and the **Teal eyes** / **Gold brows** switches
   (also keys `E` / `B`), clickable while running; the switches are remembered for the next start.
 

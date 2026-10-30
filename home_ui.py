@@ -57,6 +57,7 @@ class HomeSettings:
     camera_label: str = ""
     eyes: bool = True  # Super Saiyan teal irises.
     brows: bool = True  # Super Saiyan golden eyebrows.
+    hair: bool = True  # Super Saiyan imported golden hair (off: aura only, the user's own hair).
 
 
 @dataclass
@@ -78,6 +79,9 @@ CAMERA_TOP = 228
 HAIR_TOP = 318
 MESSAGES_TOP = 500
 START_TOP = 610
+# Super Saiyan switches: (setting, key) and their labels.
+SWITCHES = (("eyes", "e"), ("brows", "b"), ("hair", "g"))
+SWITCH_LABELS = {"eyes": "[E] Teal eyes", "brows": "[B] Gold brows", "hair": "[G] Gold hair"}
 
 
 def layout(show_camera: bool, show_hair: bool) -> list[Button]:
@@ -103,8 +107,8 @@ def layout(show_camera: bool, show_hair: bool) -> list[Button]:
             x0 = MARGIN + index * (width + gap)
             buttons.append(Button(name, label, (x0, top, x0 + width, top + 44), key))
         top += 56
-        width = (inner - gap) // 2
-        for index, (name, key) in enumerate((("eyes", "e"), ("brows", "b"))):
+        width = (inner - 2 * gap) // 3
+        for index, (name, key) in enumerate(SWITCHES):
             x0 = MARGIN + index * (width + gap)
             buttons.append(Button(name, "", (x0, top, x0 + width, top + 38), key))
     buttons.append(Button("start", "START  (Enter)", (MARGIN, START_TOP, WIDTH - MARGIN, START_TOP + 56)))
@@ -204,10 +208,9 @@ def render_home(settings: HomeSettings, buttons: list[Button], camera_count: int
         for button in buttons:
             if button.name in ("photos", "prompt", "folder", "check"):
                 _button(image, button, hover=button.name == hover)
-            elif button.name in ("eyes", "brows"):
+            elif button.name in SWITCH_LABELS:
                 on = getattr(settings, button.name)
-                label = "[E] Teal eyes" if button.name == "eyes" else "[B] Golden eyebrows"
-                _checkbox(image, replace(button, label=label), on, hover=button.name == hover)
+                _checkbox(image, replace(button, label=SWITCH_LABELS[button.name]), on, hover=button.name == hover)
 
     _text(image, "MESSAGES", MARGIN, MESSAGES_TOP, 0.46, HEADING)
     y = MESSAGES_TOP + 26
@@ -302,7 +305,7 @@ def run_home(settings: HomeSettings, actions: HomeActions, version: str = "") ->
                 if choice is not None:
                     settings.camera, settings.camera_label = choice
                 cv2.setMouseCallback(WINDOW, on_mouse)
-            elif name in ("eyes", "brows"):
+            elif name in SWITCH_LABELS:
                 setattr(settings, name, not getattr(settings, name))
             elif name == "photos":
                 call(actions.take_photos, settings)
@@ -335,14 +338,14 @@ def save_settings(path: Path, settings: HomeSettings) -> None:
     """The camera is remembered by name: indices change when webcams are plugged in or out."""
     try:
         data = {"mode": settings.mode, "camera": settings.camera_label, "eyes": settings.eyes,
-                "brows": settings.brows}
+                "brows": settings.brows, "hair": settings.hair}
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     except OSError:
         pass
 
 
 def update_settings(path: Path, **values) -> None:
-    """Change some saved settings (the live window's eye/brow switches), keeping the others."""
+    """Change some saved settings (the live window's eye/brow/hair switches), keeping the others."""
     data = load_settings(path)
     data.update(values)
     try:
