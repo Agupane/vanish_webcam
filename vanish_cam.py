@@ -105,6 +105,12 @@ VANISH_SECONDS = 3.6
 APPEAR_SECONDS = 1.8
 GESTURE_INTERVAL_SECONDS = 0.14
 FAST_GESTURE_INTERVAL_SECONDS = 0.08
+# Adaptive detection: with no hands for a while the models run at ~5 Hz, ~2.5 Hz when the image does not change
+# either; with hands (or transformed, for the hair tracking) at the mode's rate; while a pose is held, every frame.
+IDLE_GESTURE_INTERVAL_SECONDS = 0.2
+STILL_GESTURE_INTERVAL_SECONDS = 0.4
+HANDS_RECENT_SECONDS = 1.5
+MOTION_THRESHOLD = 2.5  # Mean absolute difference (0-255) of a 32x18 gray thumbnail.
 # The gesture must be held: avoids accidental vanishing while talking.
 HOLD_SECONDS = {"normal": 0.3, "naruto": 0.3, "dragonball": dragonball.HOLD_SECONDS}
 # A single missed frame does not reset the held-gesture count.
@@ -387,6 +393,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--capture-thread", action=argparse.BooleanOptionalAction, default=True,
         help="Read the webcam in a thread and always use its newest frame (default: on)",
+    )
+    parser.add_argument(
+        "--async-inference", action=argparse.BooleanOptionalAction, default=True,
+        help="Run the hand/face/person models in background threads so the video never waits for them "
+             "(default: on)",
     )
     parser.add_argument(
         "--input-video", metavar="PATH",
@@ -958,9 +969,11 @@ class MultiViewGestureRecognizer:
         self.preferred_crop: str | None = None
         self.next_retry_ms = 0
         self.retry_cursor = 0
+        self.last_hand_count = 0
 
     def recognize_gesture(self, image: mp.Image, timestamp_ms: int) -> tuple[str, float]:
         result = self.primary.recognize_for_video(image, timestamp_ms)
+        self.last_hand_count = len(getattr(result, "hand_landmarks", None) or [])
         best = classify_gesture_result(result, image)
         if best[0] == "Victory":
             self.preferred_rotation = None
@@ -1130,6 +1143,24 @@ def person_in_frame(
     if mask is None:
         mask = person_mask(segmenter, image, timestamp_ms, width, height)
     return float((mask > 0.5).mean()) > PERSON_AREA_LIMIT
+
+
+def gesture_interval(base: float, holding: bool, busy: bool, moving: bool) -> float:
+    """Seconds between detections. `busy`: hands seen recently or transformed (the hair follows the face)."""
+    if holding:
+        return 0.0
+    if busy:
+        return base
+    return IDLE_GESTURE_INTERVAL_SECONDS if moving else STILL_GESTURE_INTERVAL_SECONDS
+
+
+def motion_thumbnail(frame: np.ndarray) -> np.ndarray:
+    return cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (32, 18), interpolation=cv2.INTER_AREA)
+
+
+def hands_detected(recognizer) -> int:
+    count = getattr(recognizer, "last_hand_count", 0)
+    return count if isinstance(count, int) and not isinstance(count, bool) else 0
 
 
 def custom_sound(name: str) -> Path | None:
@@ -1629,6 +1660,15 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
     segmenter, recognizer = create_tasks(mode)
     resources.callback(segmenter.close)
     resources.callback(recognizer.close)
+    # The models run in worker threads (one per task): the loop keeps drawing with the latest result.
+    threaded = getattr(args, "async_inference", False)
+    mask_worker = frame_source.BackgroundCall("segmenter", threaded)
+    gesture_worker = frame_source.BackgroundCall("gestures", threaded)
+    resources.callback(mask_worker.close)
+    resources.callback(gesture_worker.close)
+    hands_seen_at = float("-inf")
+    checked_thumbnail: np.ndarray | None = None
+    gesture_debug = False
     log_sprite = load_log() if mode == "naruto" else None
     sound = None
     audio_device = getattr(args, "audio_device", None)
@@ -1669,7 +1709,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
         set_fullscreen(True)
 
     hold = GestureHold(HOLD_SECONDS[mode])
-    gesture_interval = GESTURE_INTERVAL_SECONDS if mode == "normal" else FAST_GESTURE_INTERVAL_SECONDS
+    base_interval = GESTURE_INTERVAL_SECONDS if mode == "normal" else FAST_GESTURE_INTERVAL_SECONDS
     mirrored = not args.no_mirror
     flip_output = mirrored and not getattr(args, "mirror_output", False)
     background: np.ndarray | None = None
@@ -1869,11 +1909,20 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 return mp_image
 
             def update_mask(every: float) -> np.ndarray | None:
+                """The latest silhouette; a new one is started every `every` seconds (waited for only when there
+                is none yet)."""
                 nonlocal last_mask, last_mask_at
-                if last_mask is None or now - last_mask_at >= every:
-                    with stage("mask"):
-                        last_mask = person_mask(segmenter, frame_image(), elapsed_ms, width, height)
-                    last_mask_at = now
+                with stage("mask"):
+                    done, mask = mask_worker.take()
+                    if done:
+                        last_mask = mask
+                    if (last_mask is None or now - last_mask_at >= every) and mask_worker.idle:
+                        mask_worker.submit(person_mask, segmenter, frame_image(), elapsed_ms, width, height)
+                        last_mask_at = now
+                    if last_mask is None or not threaded:
+                        done, mask = mask_worker.take(wait=True)
+                        if done:
+                            last_mask = mask
                 return last_mask
 
             display = camera_frame
@@ -1922,14 +1971,33 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str) -> int
                 begin_calibration(now)
 
             else:
-                if (state.phase in ("ready", "vanished")
-                        and now - state.last_gesture_check >= gesture_interval):
-                    state.last_gesture_check = now
-                    debug = args.gesture_debug and now - last_gesture_report >= 1.0
-                    if debug:
-                        last_gesture_report = now
-                    with stage("gestures"):
-                        active = gesture_active(mode, recognizer, frame_image(), elapsed_ms, debug)
+                watching = state.phase in ("ready", "vanished")
+                if watching and gesture_worker.idle:
+                    holding = hold.since is not None or power_hold.since is not None
+                    busy = now - hands_seen_at <= HANDS_RECENT_SECONDS or (super_saiyan and power.phase != "off")
+                    moving = True
+                    if not holding and not busy:
+                        thumbnail = motion_thumbnail(camera_frame)
+                        moving = checked_thumbnail is None or float(
+                            cv2.absdiff(thumbnail, checked_thumbnail).mean()) > MOTION_THRESHOLD
+                    if now - state.last_gesture_check >= gesture_interval(base_interval, holding, busy, moving):
+                        state.last_gesture_check = now
+                        checked_thumbnail = motion_thumbnail(camera_frame)
+                        gesture_debug = args.gesture_debug and now - last_gesture_report >= 1.0
+                        if gesture_debug:
+                            last_gesture_report = now
+                        if mode == "dragonball":
+                            # The face model only runs with hands in view, unless the hair follows the face.
+                            recognizer.always_face = super_saiyan and power.phase != "off"
+                        with stage("gestures"):
+                            gesture_worker.submit(gesture_active, mode, recognizer, frame_image(), elapsed_ms,
+                                                  gesture_debug)
+                with stage("gestures"):
+                    done, active = gesture_worker.take()
+                if done and watching:
+                    debug = gesture_debug
+                    if active or hands_detected(recognizer):
+                        hands_seen_at = now
                     if hold.update(active, now):
                         hold_announced = False
                         start_effect("vanishing" if state.phase == "ready" else "appearing",

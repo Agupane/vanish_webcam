@@ -219,12 +219,25 @@ For a first pass, vectorized NumPy/OpenCV and caching will move the needle more 
 | `render_status_panel` | ~1.0 ms | 380×540, 24 log lines; cached in the loop |
 | `cv2.boundingRect` vs `findNonZero` | 0.1 vs 1.7 ms | 960×540 binary mask |
 
+Bench (`--input-video clip --bench 450 --bench-super-saiyan --headless`), claude-bcn LXC (2 cores), synthetic
+cartoon clip (no hands detected), 2026-10-31:
+
+| Mode | frame p50 / p95 | gestures wait p95 | mask wait p95 | CPU |
+|---|---|---|---|---|
+| inline models, no capture thread | 33.3 / 48.8 ms | 11.2 ms | 4.9 ms | 22 % |
+| worker threads + capture thread (default) | 33.3 / 37.9 ms | 0.4 ms | 0.6 ms | 23 % |
+
 These numbers are not a benchmark suite; they are a starting point. Re-measure on the target machine, with the app
 running normally (camera + virtual camera), not only with synthetic frames.
 
 ## Benchmarking / profiling recipes
 
 ```bash
+# Per-stage times on a recorded clip (start it with ~5 s of empty room); SDL_AUDIODRIVER=dummy on a box without sound
+.venv/bin/python vanish_cam.py --input-video clip.mp4 --bench 600 --bench-super-saiyan --headless --no-virtual-camera
+# Same with the models inline, to compare
+.venv/bin/python vanish_cam.py --input-video clip.mp4 --bench 600 --no-async-inference --no-capture-thread --headless
+
 # Unit tests and resource check
 .venv/bin/python -m unittest discover -p 'test_*.py'
 .venv/bin/python vanish_cam.py --self-test
@@ -245,7 +258,8 @@ machine may be running other apps (including VanishCam itself).
 ## Invariants to preserve
 
 - **No text or UI on the video** (preview or virtual camera). HUD goes on a separate panel; tests patch `cv2.putText`.
-- **MediaPipe VIDEO timestamps must strictly increase.** Run each task at most once per frame. Reuse a mask/result
+- **MediaPipe VIDEO timestamps must strictly increase.** Run each task at most once per frame, and only through its
+  `BackgroundCall` worker (`mask_worker`, `gesture_worker`), which never runs two calls of a task at once. Reuse a mask/result
   instead of re-running a task with the same timestamp.
 - **English** in code, docs, tests and terminal messages.
 - **No frames to disk**, no network except model downloads (SHA-256 verified).

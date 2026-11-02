@@ -81,9 +81,22 @@ until E5, see §0), CHANGELOG.md (*Unreleased*) is updated, and new costs go int
   machines pending with E2.1.*
 - [ ] **E2.3 Async inference** (`RunningMode.LIVE_STREAM`, `detect_async`/`segment_async`, latest result reused).
   *Check:* bench p95 frame time < 33 ms on the owner's machines; loop tests still pass with the fake clock.
+  *Code done, differently: the VIDEO-mode tasks run in worker threads (`frame_source.BackgroundCall`, one per task,
+  one call at a time, results reused; `--no-async-inference` for the old inline behaviour). Measured first that
+  MediaPipe releases the GIL (pure-Python work 4.0 → 4.2 ms with inference running in a thread), so threads give the
+  same benefit as LIVE_STREAM without callbacks, and the loop tests keep their fake clock (inline mode). claude-bcn
+  (2 cores), synthetic clip, `--bench 450 --bench-super-saiyan --headless`: frame p95 48.8 → 37.9 ms, gestures wait
+  p95 11.2 → 0.4 ms, mask wait p95 4.9 → 0.6 ms; still 29 FPS (the clip's rate). Owner numbers on a real clip
+  pending (the < 33 ms check).*
 - [ ] **E2.4 Adaptive detection** (4–5 Hz with no hands, 12–15 Hz with hands, full rate during a hold; thumbnail motion
   gate; face model only when a hand is near the head). *Check:* bench idle CPU before/after; owner confirms teleport,
   Super Saiyan and power-down still trigger reliably.
+  *Code done: `gesture_interval` (every frame while a pose is held; the mode's rate with hands seen in the last 1.5 s
+  or while transformed, for the hair tracking; 5 Hz otherwise, 2.5 Hz when a 32×18 thumbnail does not change);
+  the Dragon Ball detector skips the face model when no hands are in view unless transformed (`always_face`).
+  Tests: `AdaptiveDetectionTests`, `test_face_model_skipped_without_hands_unless_asked`. Pending: owner idle CPU
+  before/after and confirmation that teleport, Super Saiyan and power-down still trigger reliably (the first
+  detection of a pose can come up to 0.4 s later in a still room).*
 - [ ] **E2.5 Small items** (preview at 15 FPS, camera at working resolution, `apply_dissolve` uint8/ROI, cached speed
   lines). *Check:* bench before/after.
 - [ ] **E2.6 Gate (owner):** bench numbers on Ubuntu and Windows in ALGORITHMS.md; no perceived latency on gestures.

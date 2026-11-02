@@ -21,6 +21,12 @@ All notable changes to this fork are documented here. The format is based on
   **Gold hair** checkbox in the home window and the side panel, key `G`, or `--no-ssj-hair`; remembered like the
   eyes and brows. The side panel shows the three switches on one row (Eyes / Brows / Hair).
 
+- Smoother video: the hand/face/person models run in background threads, so the picture never waits for them
+  (`--no-async-inference` turns it off), and they run less often when nothing is happening: ~5 Hz with no hands in
+  view (2.5 Hz if the image does not change), the usual rate with hands or while transformed, and every frame while a
+  pose is held. The Dragon Ball face model is skipped while no hands are in view (unless the golden hair follows
+  the face).
+
 - Fluidity groundwork: the webcam is read in a thread that keeps only the newest frame (`--no-capture-thread` turns
   it off), so a slow frame no longer leaves the next ones queued with extra delay. `--input-video PATH` plays a
   recorded clip instead of the webcam (paced to its FPS, looping, never written), and `--bench N` prints per-stage

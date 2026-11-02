@@ -122,6 +122,63 @@ class LatestFrameCapture:
         self.source.release()
 
 
+class BackgroundCall:
+    """One call at a time in a worker thread, so the loop never waits for a model (MediaPipe releases the GIL).
+
+    `submit` starts a call only when the previous one is done (a MediaPipe VIDEO task must not run twice at once and
+    needs increasing timestamps); `take` returns each finished result once. With `threaded=False` the call runs
+    inside `submit`, which keeps the loop deterministic for tests and `--no-async-inference`.
+    """
+
+    def __init__(self, name: str, threaded: bool = True):
+        self.name = name
+        self.threaded = threaded
+        self._thread: threading.Thread | None = None
+        self._done = False
+        self._value = None
+        self._error: BaseException | None = None
+
+    @property
+    def idle(self) -> bool:
+        return self._thread is None or not self._thread.is_alive()
+
+    def submit(self, function, *args) -> bool:
+        if not self.idle:
+            return False
+
+        def call() -> None:
+            try:
+                self._value, self._error = function(*args), None
+            except BaseException as error:  # noqa: BLE001 - raised again in the loop by take().
+                self._value, self._error = None, error
+            self._done = True
+
+        self._done = False
+        if self.threaded:
+            self._thread = threading.Thread(target=call, name=f"VanishCam {self.name}", daemon=True)
+            self._thread.start()
+        else:
+            call()
+        return True
+
+    def take(self, wait: bool = False):
+        """(True, value) once per finished call, else (False, None). `wait` blocks for a call in progress."""
+        if wait and self._thread is not None:
+            self._thread.join()
+        if not self._done or not self.idle:
+            return False, None
+        self._done = False
+        if self._error is not None:
+            error, self._error = self._error, None
+            raise error
+        return True, self._value
+
+    def close(self) -> None:
+        """Wait for a call in progress: the models it uses are closed right after."""
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+
 class StageBench:
     """Per-frame stage timings. `stage(name)` adds the wall time of a block to the current frame."""
 

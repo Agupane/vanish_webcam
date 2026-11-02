@@ -21,7 +21,7 @@ Algorithm inventory, measured costs, hot spots and the optimization backlog: [AL
 | `vanish_sound.py` | Plays an effect sound (pygame, or `ffplay` fallback); `play(loops, fade_ms)`, `stop(fade_ms)`, `set_volume` |
 | `ssj_face.py` | Super Saiyan face: teal irises, golden brows, import of the user's golden hair pictures (`ssj_hair/ssj_*.png`) and `HairOverlay`, which fits the hair on the live face (`place_live`: view fade + tips warp, `PlacedHair` shared with the aura) |
 | `ssj_motion.py` | Hair motion, pure NumPy/OpenCV with an injected clock: `fit_similarity` (weighted, deterministic), `HeadTracker` (a face every frame from ~12.5 Hz detections: alpha-beta filter + decaying prediction), `HairDynamics` (spring sway, power-up kick), `hair_warp_maps` (roots fixed, tips move, ki flutter) |
-| `frame_source.py` | `VideoFileSource` (`--input-video`: a clip paced like a webcam, looping), `LatestFrameCapture` (capture thread keeping only the newest frame; on by default, `--no-capture-thread`), `StageBench` (`--bench N`: per-stage p50/p95 and CPU %) |
+| `frame_source.py` | `VideoFileSource` (`--input-video`: a clip paced like a webcam, looping), `LatestFrameCapture` (capture thread keeping only the newest frame; on by default, `--no-capture-thread`), `StageBench` (`--bench N`: per-stage p50/p95 and CPU %), `BackgroundCall` (one model call at a time in a worker thread) |
 | `tools/aura_preview.py` | Renders the Super Saiyan aura on a synthetic scene (light/dark wall, chair) for tuning without a camera |
 | `test_*.py` | unittest suite; `run_loop()` in `test_video_output.py` drives the real loop with a fake clock |
 | `install.sh` | Installer for macOS (uv + OBS) and Linux (delegates to `install-ubuntu.sh`); works via `curl \| bash` |
@@ -78,7 +78,9 @@ Phases (`AppState.phase`): `calibrating` → `ready` → `vanishing` → `vanish
   `assets/teleport.mp3` (from `bernardocm10/vanish_webcam`) and `assets/ssj_transform.mp3`; everything else is
   synthesized. Users may drop their own `assets/teleport.*` and `assets/ssj_*.{MP3,mp3,wav,ogg,m4a,flac}`, which take
   precedence.
-- MediaPipe VIDEO-mode tasks need strictly increasing timestamps: run each task at most once per frame.
+- MediaPipe VIDEO-mode tasks need strictly increasing timestamps: run each task at most once per frame, through its
+  worker (`mask_worker` / `gesture_worker`, `frame_source.BackgroundCall`): the models run in threads by default
+  (`--no-async-inference` runs them inline, as the tests do).
 - Keep the loop testable: patchable seams are `gesture_active`, `person_mask`, `person_in_frame`, `create_tasks`,
   `open_camera`, `open_virtual_camera`, `VanishSound`, `teleport_sound_path`, `power_active`, `ssj_sound_paths`,
   `load_hair`, `detect_face_points`, `draw_setup_marks`, `render_status_panel`, `compose_dashboard`, `windows_camera_names`, `find_cameras` and

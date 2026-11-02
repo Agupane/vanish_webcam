@@ -74,6 +74,22 @@ class GestureTests(unittest.TestCase):
         hands.close.assert_called_once()
         faces.close.assert_called_once()
 
+    def test_face_model_skipped_without_hands_unless_asked(self):
+        hands, faces = Mock(), Mock()
+        hands.detect_for_video.return_value = SimpleNamespace(hand_landmarks=[])
+        faces.detect_for_video.return_value = SimpleNamespace(face_landmarks=[normalized(face_points())])
+        detector = db.InstantTransmissionDetector(hands, faces)
+        image = SimpleNamespace(width=640, height=480)
+        detector.detect(image, 100)  # By default (always_face) the face is detected.
+        self.assertEqual(faces.detect_for_video.call_count, 1)
+        detector.always_face = False
+        self.assertFalse(detector.detect(image, 200))
+        self.assertEqual(faces.detect_for_video.call_count, 1)
+        self.assertEqual(detector.recent_faces(250), detector.last_good_faces)  # The last face is still recent.
+        hands.detect_for_video.return_value = SimpleNamespace(hand_landmarks=[normalized(two_fingers_up())])
+        self.assertTrue(detector.detect(image, 300))  # Hands in view: the face is needed again.
+        self.assertEqual(faces.detect_for_video.call_count, 2)
+
 
 class TeleportEffectTests(unittest.TestCase):
     def setUp(self):

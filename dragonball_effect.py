@@ -109,10 +109,15 @@ class InstantTransmissionDetector:
         # face around so the charge pose still has a reference.
         self.last_good_faces: list = []
         self.last_good_face_ms = -10**9
+        # Both poses need hands, so with none in view the face model is skipped unless something follows the face
+        # (the Super Saiyan hair): set by the loop.
+        self.always_face = True
 
     def detect(self, image, timestamp_ms: int) -> bool:
         hands = self.hands.detect_for_video(image, timestamp_ms).hand_landmarks
-        faces = self.faces.detect_for_video(image, timestamp_ms).face_landmarks
+        faces = []
+        if hands or self.always_face:
+            faces = self.faces.detect_for_video(image, timestamp_ms).face_landmarks
         self.last_hand_count = len(hands)
         self.last_face_found = bool(faces)
         self.last_hands, self.last_faces = hands, faces

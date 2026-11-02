@@ -150,6 +150,39 @@ class LatestFrameCaptureTests(unittest.TestCase):
             capture.release()
 
 
+class BackgroundCallTests(unittest.TestCase):
+    def test_inline_mode_runs_in_submit(self):
+        worker = fs.BackgroundCall("test", threaded=False)
+        self.assertEqual(worker.take(), (False, None))
+        self.assertTrue(worker.submit(lambda a, b: a + b, 2, 3))
+        self.assertEqual(worker.take(), (True, 5))
+        self.assertEqual(worker.take(), (False, None))  # Each result once.
+
+    def test_thread_runs_one_call_at_a_time_and_the_loop_does_not_wait(self):
+        release = threading.Event()
+        worker = fs.BackgroundCall("test")
+        started = time.perf_counter()
+        self.assertTrue(worker.submit(lambda: release.wait(2.0) and "mask"))
+        self.assertLess(time.perf_counter() - started, 0.5)
+        self.assertFalse(worker.idle)
+        self.assertFalse(worker.submit(lambda: "second"))  # Busy: dropped, never queued.
+        self.assertEqual(worker.take(), (False, None))
+        release.set()
+        self.assertEqual(worker.take(wait=True), (True, "mask"))
+        self.assertTrue(worker.idle)
+        worker.close()
+
+    def test_errors_reach_the_loop(self):
+        def broken():
+            raise ValueError("model failed")
+        for threaded in (False, True):
+            worker = fs.BackgroundCall("test", threaded)
+            worker.submit(broken)
+            with self.assertRaisesRegex(ValueError, "model failed"):
+                worker.take(wait=True)
+            self.assertEqual(worker.take(), (False, None))
+
+
 class StageBenchTests(unittest.TestCase):
     def test_percentiles_per_stage_and_cpu(self):
         clock, cpu = FakeClock(), FakeClock()
@@ -183,6 +216,13 @@ class BenchLoopTests(unittest.TestCase):
         self.assertEqual(camera.send.call_count, 30)
         self.assertTrue(any("[Bench] 30 frames" in line for line in printed))
         self.assertTrue(any(line.startswith("[Bench] capture") for line in printed))
+
+    def test_loop_with_models_in_threads_still_vanishes_and_comes_back(self):
+        # Real worker threads with the fake clock: results arrive a frame or so later, never lost.
+        held = lambda t: 5.0 <= t < 6.0 or 10.0 <= t < 11.0
+        frames, shown, _, _, _ = run_loop(gesture=held, async_inference=True)
+        np.testing.assert_array_equal(shown[95], frames[0])  # Gone: the empty room.
+        np.testing.assert_array_equal(shown[-1], frames[-1])  # Back.
 
     def test_bench_can_start_transformed(self):
         _, _, _, _, printed = run_loop(mode="dragonball", seconds=6.0, bench=50, headless=True,

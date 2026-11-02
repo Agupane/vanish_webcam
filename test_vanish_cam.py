@@ -8,6 +8,7 @@ import numpy as np
 import mediapipe as mp
 
 import vanish_cam as app
+from test_video_output import run_loop
 from vanish_cam import (
     GestureHold, MultiViewGestureRecognizer, camera_source, compose_dashboard,
     find_linux_cameras, linux_camera_label, mode_name, recognize_gesture,
@@ -160,6 +161,41 @@ class GestureHoldTests(unittest.TestCase):
         hold.update(False, 3.5)
         hold.update(True, 3.6)
         self.assertTrue(hold.update(True, 3.95))
+
+
+class AdaptiveDetectionTests(unittest.TestCase):
+    def test_interval_rules(self):
+        self.assertEqual(app.gesture_interval(0.08, True, False, False), 0.0)  # Holding: every frame.
+        self.assertEqual(app.gesture_interval(0.08, False, True, False), 0.08)  # Hands seen or transformed.
+        self.assertEqual(app.gesture_interval(0.08, False, False, True), app.IDLE_GESTURE_INTERVAL_SECONDS)
+        self.assertEqual(app.gesture_interval(0.08, False, False, False), app.STILL_GESTURE_INTERVAL_SECONDS)
+
+    def test_motion_thumbnail_sees_a_change(self):
+        still = np.full((540, 960, 3), 80, np.uint8)
+        moved = still.copy()
+        moved[100:400, 300:600] = 200
+        self.assertEqual(float(np.abs(app.motion_thumbnail(still).astype(int)
+                                      - app.motion_thumbnail(still)).mean()), 0.0)
+        self.assertGreater(float(np.abs(app.motion_thumbnail(moved).astype(int)
+                                        - app.motion_thumbnail(still)).mean()), app.MOTION_THRESHOLD)
+
+    def test_loop_slows_down_when_idle_and_speeds_up_with_a_pose(self):
+        calls = []
+
+        def gesture(t):
+            calls.append(round(t, 1))
+            return 6.0 <= t < 6.5  # Part of the forehead pose (never held the full second).
+        run_loop(mode="dragonball", seconds=11.0, gesture=gesture)
+        idle = [t for t in calls if 9.0 <= t]
+        self.assertTrue(all(b - a >= 0.39 for a, b in zip(idle, idle[1:])), idle)  # Still room: ~2.5 Hz.
+        held = [t for t in calls if 6.0 <= t < 6.5]
+        # Seen at the next idle check (at most 0.4 s later), then every frame while holding.
+        self.assertLessEqual(held[0], 6.4)
+        self.assertEqual(held, [round(held[0] + 0.1 * index, 1) for index in range(len(held))])
+        self.assertEqual(held[-1], 6.4)
+        after = [t for t in calls if 6.8 <= t < 7.8]
+        self.assertGreaterEqual(len(after), 9)  # Hands seen recently: the mode's rate (every 0.1 s frame).
+        self.assertTrue(any(b - a >= 0.19 for a, b in zip(calls, calls[1:]) if a < 6.0))
 
 
 class ModeTests(unittest.TestCase):
